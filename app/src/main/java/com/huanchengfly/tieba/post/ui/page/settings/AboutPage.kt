@@ -82,7 +82,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 private const val URL_PROJECT_GITHUB = "https://github.com/0ranko0P/TiebaLite"
-private const val URL_PROJECT_FORK_GITHUB = "https://github.com/neveragain233/TiebaLite"
+private const val URL_PROJECT_FORK_GITHUB = "https://github.com/kaikaisadc/TiebaLite-0ranko"
 
 private sealed interface UpdateUiState {
     data object Idle : UpdateUiState

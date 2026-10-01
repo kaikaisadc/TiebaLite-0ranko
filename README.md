@@ -20,15 +20,15 @@
 **本软件及源码仅供学习交流使用，严禁用于商业用途。**
 
 ## 下载
-* [Github Releases](https://github.com/neveragain233/TiebaLite/releases)
+* [Github Releases](https://github.com/kaikaisadc/TiebaLite-0ranko/releases)
 
 
 ## 构建
 
 1. 克隆仓库
 ```shell
-git clone https://github.com/neveragain233/TiebaLite.git
-cd TiebaLite
+git clone https://github.com/kaikaisadc/TiebaLite-0ranko.git
+cd TiebaLite-0ranko
 ```
 
 2. 配置应用签名 (非必须)
