@@ -643,7 +643,11 @@ fun ThreadPage(
 
     LaunchedEffect(state, pendingCommentNav) {
         val pending = pendingCommentNav ?: return@LaunchedEffect
-        if (state.isLoadingMore) return@LaunchedEffect
+        if (state.loadState is ThreadLoadState.Running) return@LaunchedEffect
+        if (state.loadState is ThreadLoadState.Failed) {
+            pendingCommentNav = null
+            return@LaunchedEffect
+        }
         val newLayout = buildThreadListLayout(state)
         val target = newLayout.targetPostId(pending.anchorPostId, pending.direction)
         if (target != null) {
@@ -821,7 +825,7 @@ fun ThreadPage(
     StateScreen(
         modifier = Modifier.background(MaterialTheme.colorScheme.surface),
         isEmpty =  isEmpty,
-        isLoading = state.isRefreshing,
+        isLoading = state.isLoadingPage,
         error = state.error,
         onReload = onRefreshClicked,
     ) {
