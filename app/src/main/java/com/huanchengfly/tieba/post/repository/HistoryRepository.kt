@@ -1,6 +1,5 @@
 package com.huanchengfly.tieba.post.repository
 
-import androidx.compose.ui.util.fastMap
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
@@ -110,16 +109,15 @@ class HistoryRepository @Inject constructor(
     }
 
     suspend fun deleteHistory(historyList: List<History>) {
-        val ids = historyList.fastMap { it.id }
+        if (historyList.isEmpty()) return
+        val threads = historyList.filterIsInstance<ThreadHistory>().map { it.id }
+        val forums = historyList.filterIsInstance<ForumHistory>().map { it.id }
+        val users = historyList.filterIsInstance<UserHistory>().map { it.id }
         withContext(NonCancellable) {
-            when (historyList.first()) {
-                is ThreadHistory -> threadHistoryDao.deleteByIdList(ids)
-
-                is ForumHistory -> forumHistoryDao.deleteByIdList(ids)
-
-                is UserHistory -> userProfileDao.deleteByIdList(ids)
-
-                else -> throw RuntimeException()
+            dataBase.withTransaction {
+                if (threads.isNotEmpty()) threadHistoryDao.deleteByIdList(threads)
+                if (forums.isNotEmpty()) forumHistoryDao.deleteByIdList(forums)
+                if (users.isNotEmpty()) userProfileDao.deleteByIdList(users)
             }
         }
     }

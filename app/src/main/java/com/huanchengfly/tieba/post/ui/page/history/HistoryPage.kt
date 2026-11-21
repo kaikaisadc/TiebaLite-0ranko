@@ -190,10 +190,17 @@ fun HistoryPage(
                 actions = {
                     val deleteVisible by remember { derivedStateOf { isUpdating || selectMode } }
                     FadedVisibility(visible = deleteVisible) {
-                        DeleteIconButton(deleting = isUpdating, enabled = selectedItems.isNotEmpty()) {
-                            selectMode = false
-                            viewModel.onDelete(selectedItems.toList())
-                            selectedItems.clear()
+                        DeleteIconButton(
+                            deleting = isUpdating,
+                            enabled = !isUpdating && selectedItems.isNotEmpty(),
+                        ) {
+                            val selection = selectedItems.toList()
+                            coroutineScope.launch {
+                                if (viewModel.onDelete(selection)) {
+                                    selectMode = false
+                                    selectedItems.clear()
+                                }
+                            }
                         }
                     }
 
@@ -204,9 +211,12 @@ fun HistoryPage(
                                 icon = Icons.Rounded.DeleteSweep,
                                 enabled = !isUpdating,
                             ) {
-                                viewModel.onDeleteAll()
-                                context.toastShort(R.string.toast_clear_success)
-                                navigator.navigateUp()
+                                coroutineScope.launch {
+                                    if (viewModel.onDeleteAll()) {
+                                        context.toastShort(R.string.toast_clear_success)
+                                        navigator.navigateUp()
+                                    }
+                                }
                             }
                         },
                         triggerShape = CircleShape,
@@ -286,7 +296,9 @@ fun HistoryPage(
                     selectedItems = selectedItems,
                     onClick = { it: History ->
                         if (selectMode) {
-                            if (selectedItems.contains(it)) selectedItems -= it else selectedItems += it
+                            if (!isUpdating) {
+                                if (!selectedItems.remove(it)) selectedItems.add(it)
+                            }
                         } else {
                             onHistoryClicked(it)
                         }

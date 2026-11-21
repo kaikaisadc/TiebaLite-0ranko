@@ -1,6 +1,7 @@
 package com.huanchengfly.tieba.post.ui.page.history
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
@@ -8,21 +9,22 @@ import androidx.paging.cachedIn
 import androidx.paging.insertSeparators
 import androidx.paging.map
 import com.huanchengfly.tieba.post.di.DefaultDispatcher
+import com.huanchengfly.tieba.post.R
+import com.huanchengfly.tieba.post.api.retrofit.exception.getErrorMessage
 import com.huanchengfly.tieba.post.models.database.History
 import com.huanchengfly.tieba.post.repository.HistoryRepository
+import com.huanchengfly.tieba.post.toastShort
 import com.huanchengfly.tieba.post.utils.DateTimeUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -50,28 +52,26 @@ class HistoryViewModel @Inject constructor(
     private val _updating: MutableStateFlow<Boolean> = MutableStateFlow(false)
     val updating: StateFlow<Boolean> = _updating.asStateFlow()
 
-    private inline fun update(crossinline block: suspend CoroutineScope.() -> Unit) {
-        if (!_updating.value) {
-            viewModelScope.launch(dispatcher) {
-                _updating.update { true }
-                block()
-                _updating.update { false }
-            }
+    private suspend fun update(@StringRes errorMessage: Int, block: suspend () -> Unit): Boolean {
+        if (!_updating.compareAndSet(false, true)) return false
+        return try {
+            block()
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            context.toastShort(errorMessage, e.getErrorMessage())
+            false
+        } finally {
+            _updating.value = false
         }
     }
 
-    fun onDelete(history: History) = update {
-        historyRepo.deleteHistory(history)
-    }
-
-    fun onDelete(historyList: List<History>) = update {
+    suspend fun onDelete(historyList: List<History>) = update(R.string.toast_delete_failure) {
         historyRepo.deleteHistory(historyList)
     }
 
-    /**
-     * Called when delete all button clicked
-     * */
-    fun onDeleteAll() = update {
+    suspend fun onDeleteAll() = update(R.string.toast_clear_failure) {
         historyRepo.deleteAll()
     }
 
