@@ -453,7 +453,7 @@ private class SettingsSegmentedPrefsScopeImpl<T>(
                 title = title,
                 onClick = {
                     val newCheckedState = !checked
-                    settings.save { update(it, newCheckedState) }
+                    this@SettingsSegmentedPrefsScopeImpl.settings.save { update(it, newCheckedState) }
                     onCheckedChange?.invoke(newCheckedState)
                 },
                 shapes = shapes,
@@ -502,7 +502,7 @@ private class SettingsSegmentedPrefsScopeImpl<T>(
                 shapes = shapes,
                 enabled = enabled,
                 onValueChange = { newOption ->
-                    settings.save { update(it, newOption) }
+                    this@SettingsSegmentedPrefsScopeImpl.settings.save { update(it, newOption) }
                     onValueChanged?.invoke(newOption)
                 },
             )
