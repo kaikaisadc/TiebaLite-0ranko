@@ -1,86 +1,28 @@
 package com.huanchengfly.tieba.post.api.interfaces
 
-import com.huanchengfly.tieba.post.api.models.*
+import com.huanchengfly.tieba.post.api.models.SearchForumBean
+import com.huanchengfly.tieba.post.api.models.SearchThreadBean
+import com.huanchengfly.tieba.post.api.models.SearchUserBean
 import com.huanchengfly.tieba.post.api.models.protos.searchSug.SearchSugResponse
-import com.huanchengfly.tieba.post.api.retrofit.ApiResult
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.flow.Flow
-import retrofit2.Call
 
 interface TiebaSearchApi {
     /**
-     * 吧内搜索
-     *
-     * @param keyword 搜索关键词
-     * @param forumName 搜索吧名
-     * @param onlyThread 是否仅搜索主题贴
-     * @param sortMode 排序模式（1 = 时间倒序，2 = 相关性排序）
-     * @param page 分页页码（从 1 开始）
-     * @param pageSize 每页贴数（默认 30）
-     */
-    fun searchPost(
-        keyword: String,
-        forumName: String,
-        onlyThread: Boolean = false,
-        sortMode: Int = 1,
-        page: Int = 1,
-        pageSize: Int = 30
-    ): Call<SearchPostBean>
-
-    /**
-     * 吧内搜索（异步）
-     *
-     * @param keyword 搜索关键词
-     * @param forumName 搜索吧名
-     * @param onlyThread 是否仅搜索主题贴
-     * @param sortMode 排序模式（1 = 时间倒序，2 = 相关性排序）
-     * @param page 分页页码（从 1 开始）
-     * @param pageSize 每页贴数（默认 30）
-     */
-    fun searchPostAsync(
-        keyword: String,
-        forumName: String,
-        onlyThread: Boolean = false,
-        sortMode: Int = 1,
-        page: Int = 1,
-        pageSize: Int = 30
-    ): Deferred<ApiResult<SearchPostBean>>
-
-    /**
      * 搜索用户
      *
      * @param keyword 搜索关键词
      */
-    fun searchUser(
+    suspend fun searchUser(
         keyword: String,
-    ): Call<SearchUserBean>
-
-    /**
-     * 搜索用户
-     *
-     * @param keyword 搜索关键词
-     */
-    fun searchUserFlow(
-        keyword: String,
-    ): Flow<SearchUserBean>
+    ): SearchUserBean
 
     /**
      * 搜索吧
      *
      * @param keyword 关键词
      */
-    fun searchForum(
+    suspend fun searchForum(
         keyword: String,
-    ): Call<SearchForumBean>
-
-    /**
-     * 搜索吧
-     *
-     * @param keyword 关键词
-     */
-    fun searchForumFlow(
-        keyword: String,
-    ): Flow<SearchForumBean>
+    ): SearchForumBean
 
     /**
      * 搜索主题贴
@@ -89,11 +31,11 @@ interface TiebaSearchApi {
      * @param page 分页页码
      * @param sort 结果排序（0 = 旧贴在前，2 = 相关程度，5 = 新贴在前）
      */
-    fun searchThreadFlow(
+    suspend fun searchThread(
         keyword: String,
         page: Int,
         sort: Int,
-    ): Flow<SearchThreadBean>
+    ): SearchThreadBean
 
     /**
      * 吧内搜索
@@ -106,7 +48,7 @@ interface TiebaSearchApi {
      * @param page 分页页码（从 1 开始）
      * @param pageSize 每页贴数（默认 20）
      */
-    fun searchPostFlow(
+    suspend fun searchPost(
         keyword: String,
         forumName: String,
         forumId: Long,
@@ -114,7 +56,7 @@ interface TiebaSearchApi {
         filterType: Int = 1,
         page: Int = 1,
         pageSize: Int = 20,
-    ): Flow<SearchThreadBean>
+    ): SearchThreadBean
 
     /**
      * 搜索联想
@@ -122,8 +64,8 @@ interface TiebaSearchApi {
      * @param keyword 关键词
      * @param isForum 是否为吧
      */
-    fun searchSuggestionsFlow(
+    suspend fun searchSuggestions(
         keyword: String,
         isForum: Boolean = false,
-    ): Flow<SearchSugResponse>
+    ): SearchSugResponse
 }

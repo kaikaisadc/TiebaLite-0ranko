@@ -577,7 +577,7 @@ object MixedTiebaApiImpl : ITiebaApi,
         )
     }
 
-    override fun pbPageFlow(
+    override suspend fun pbPage(
         threadId: Long,
         page: Int,
         postId: Long,
@@ -588,8 +588,8 @@ object MixedTiebaApiImpl : ITiebaApi,
         stType: String,
         mark: Int,
         lastPostId: Long?,
-    ): Flow<PbPageResponse> {
-        return RetrofitTiebaApi.OFFICIAL_PROTOBUF_TIEBA_V12_API.pbPageFlow(
+    ): PbPageResponse {
+        return RetrofitTiebaApi.OFFICIAL_PROTOBUF_TIEBA_V12_API.pbPage(
             buildProtobufRequestBody(
                 PbPageRequest(
                     PbPageRequestData(
@@ -646,14 +646,14 @@ object MixedTiebaApiImpl : ITiebaApi,
         )
     }
 
-    override fun pbFloorFlow(
+    override suspend fun pbFloor(
         threadId: Long,
         postId: Long,
         forumId: Long,
         page: Int,
         subPostId: Long
-    ): Flow<PbFloorResponse> {
-        return RetrofitTiebaApi.OFFICIAL_PROTOBUF_TIEBA_V22_API.pbFloorFlow(
+    ): PbFloorResponse {
+        return RetrofitTiebaApi.OFFICIAL_PROTOBUF_TIEBA_V22_API.pbFloor(
             buildProtobufRequestBody(
                 PbFloorRequest(
                     PbFloorRequestData(

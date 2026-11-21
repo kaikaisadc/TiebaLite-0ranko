@@ -140,20 +140,6 @@ interface WebTiebaApi {
         @retrofit2.http.Header("cookie") cookie: String
     ): Flow<MyInfoBean>
 
-    @GET("/mo/q/search/forum")
-    fun searchForum(
-        @Query("word") keyword: String
-    ): Call<SearchForumBean>
-
-    @GET("/mo/q/search/thread")
-    fun searchThread(
-        @Query("word") keyword: String,
-        @Query("pn") page: Int,
-        @Query("st") order: String,
-        @Query("tt") filter: String,
-        @Query("ct") ct: String = "2"
-    ): Call<SearchThreadBean>
-
     @Headers(
         "${Header.FORCE_LOGIN}: ${Header.FORCE_LOGIN_TRUE}"
     )

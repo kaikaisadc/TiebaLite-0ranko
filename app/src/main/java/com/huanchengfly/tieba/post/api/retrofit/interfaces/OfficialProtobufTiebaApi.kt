@@ -77,14 +77,14 @@ interface OfficialProtobufTiebaApi {
     ): Flow<ProfileResponse>
 
     @POST("/c/f/pb/page?cmd=302001&format=protobuf")
-    fun pbPageFlow(
+    suspend fun pbPage(
         @Body body: MyMultipartBody,
-    ): Flow<PbPageResponse>
+    ): PbPageResponse
 
     @POST("/c/f/pb/floor?cmd=302002&format=protobuf")
-    fun pbFloorFlow(
+    suspend fun pbFloor(
         @Body body: MyMultipartBody,
-    ): Flow<PbFloorResponse>
+    ): PbFloorResponse
 
     @POST("/c/c/post/add?cmd=309731&format=protobuf")
     fun addPostFlow(
@@ -92,9 +92,9 @@ interface OfficialProtobufTiebaApi {
     ): Flow<AddPostResponse>
 
     @POST("/c/s/searchSug?cmd=309438&format=protobuf")
-    fun searchSugFlow(
+    suspend fun searchSug(
         @Body body: MyMultipartBody,
-    ): Flow<SearchSugResponse>
+    ): SearchSugResponse
 
     @POST("/c/f/forum/getforumdetail?cmd=303021&format=protobuf")
     fun getForumDetailFlow(

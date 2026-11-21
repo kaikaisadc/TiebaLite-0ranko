@@ -659,7 +659,7 @@ interface ITiebaApi :
      * @param mark 是否收藏
      * @param lastPostId 最后一条回复 ID
      */
-    fun pbPageFlow(
+    suspend fun pbPage(
         threadId: Long,
         page: Int = 0,
         postId: Long = 0L,
@@ -670,7 +670,7 @@ interface ITiebaApi :
         stType: String = "",
         mark: Int = 0,
         lastPostId: Long? = null,
-    ): Flow<PbPageResponse>
+    ): PbPageResponse
 
     /**
      * 楼中楼页面
@@ -681,13 +681,13 @@ interface ITiebaApi :
      * @param postId 回复 ID
      * @param subPostId 楼中楼回复 ID
      */
-    fun pbFloorFlow(
+    suspend fun pbFloor(
         threadId: Long,
         postId: Long,
         forumId: Long = 0L,
         page: Int = 1,
         subPostId: Long = 0L,
-    ): Flow<PbFloorResponse>
+    ): PbFloorResponse
 
     /**
      * 查看用户的所有主题贴/回复

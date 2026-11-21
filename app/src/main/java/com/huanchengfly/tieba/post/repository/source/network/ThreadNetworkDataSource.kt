@@ -72,7 +72,7 @@ object ThreadNetworkDataSource {
         lastPostId: Long? = null,
     ): PbPageResponseData {
         return TiebaApi.getInstance()
-            .pbPageFlow(
+            .pbPage(
                 threadId = threadId,
                 page = page,
                 postId = postId,
@@ -84,7 +84,6 @@ object ThreadNetworkDataSource {
                 mark = if (from == FROM_STORE) 1 else 0,
                 lastPostId = lastPostId
             )
-            .firstOrThrow()
             .run {
                 data_ ?: throw TiebaApiException(commonResponse = this.error.commonResponse)
             }
@@ -188,8 +187,7 @@ object ThreadNetworkDataSource {
         require(page > 0) { "Illegal Page: $page" }
 
         return TiebaApi.getInstance()
-            .pbFloorFlow(threadId, postId, forumId, page, subPostId)
-            .firstOrThrow()
+            .pbFloor(threadId, postId, forumId, page, subPostId)
             .run {
                 if (data_ == null) throw TiebaApiException(commonResponse = this.error.commonResponse)
                 val forum = data_.forum ?: throw TiebaException("Null forum data")

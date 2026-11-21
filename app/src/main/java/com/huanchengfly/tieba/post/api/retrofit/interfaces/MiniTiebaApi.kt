@@ -380,37 +380,6 @@ interface MiniTiebaApi {
         @Field("delete_my_post") delete_my_post: Int
     ): Call<CommonResponse>
 
-    @POST("/c/s/searchpost")
-    @FormUrlEncoded
-    fun searchPost(
-        @Field("word") keyword: String,
-        @Field("kw") forumName: String,
-        @Field("pn") page: Int = 1,
-        @Field("rn") pageSize: Int = 30,
-        @Field("only_thread") only_thread: Int = 0,
-        @Field("sm") sortMode: Int = 1
-    ): Call<SearchPostBean>
-
-    @POST("/c/s/searchpost")
-    @FormUrlEncoded
-    fun searchPostAsync(
-        @Field("word") keyword: String,
-        @Field("kw") forumName: String,
-        @Field("pn") page: Int = 1,
-        @Field("rn") pageSize: Int = 30,
-        @Field("only_thread") only_thread: Int = 0,
-        @Field("sm") sortMode: Int = 1
-    ): Deferred<ApiResult<SearchPostBean>>
-
-    @GET("/mo/q/search/user")
-    fun searchUser(
-        @Query("word") keyword: String,
-        @retrofit2.http.Header("client_user_token") client_user_token: String? = AccountUtil.getUid(),
-        @Query("_client_version") client_version: String = "8.0.8.0",
-        @retrofit2.http.Header(Header.USER_AGENT) user_agent: String = "bdtb for Android $client_version",
-        @Query("cuid_gid") cuid_gid: String = ""
-    ): Call<SearchUserBean>
-
     @Headers("${Header.FORCE_LOGIN}: ${Header.FORCE_LOGIN_TRUE}")
     @POST("/c/f/ueg/checkjubao")
     @FormUrlEncoded

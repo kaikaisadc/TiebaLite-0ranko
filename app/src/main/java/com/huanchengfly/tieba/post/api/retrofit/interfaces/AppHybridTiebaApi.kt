@@ -20,17 +20,17 @@ interface AppHybridTiebaApi {
         "${TiebaHeaders.NO_COMMON_PARAMS}: ${Param.BDUSS},${Param.STOKEN}",
     )
     @GET("/mo/q/search/forum")
-    fun searchForumFlow(
+    suspend fun searchForum(
         @Query("word") keyword: String,
         @Header("Referer") referer: String = "https://tieba.baidu.com/mo/q/hybrid/search?keyword=$keyword&_webview_time=${System.currentTimeMillis()}".urlEncode(),
-    ): Flow<SearchForumBean>
+    ): SearchForumBean
 
     @Headers(
         "${TiebaHeaders.NO_ST_PARAMS}: ${TiebaHeaders.NO_ST_PARAMS_TRUE}",
         "${TiebaHeaders.NO_COMMON_PARAMS}: ${Param.BDUSS},${Param.STOKEN}",
     )
     @GET("/mo/q/search/thread")
-    fun searchThreadFlow(
+    suspend fun searchThread(
         @Query("word") keyword: String,
         @Query("pn") page: Int,
         @Query("st") sort: Int,
@@ -41,17 +41,17 @@ interface AppHybridTiebaApi {
         @Query("is_use_zonghe") isUseZonghe: Int? = 1,
         @Query("cv") clientVersion: String = "99.9.101",
         @Header("Referer") referer: String = "https://tieba.baidu.com/mo/q/hybrid/search?keyword=$keyword&_webview_time=${System.currentTimeMillis()}".urlEncode(),
-    ): Flow<SearchThreadBean>
+    ): SearchThreadBean
 
     @Headers(
         "${TiebaHeaders.NO_ST_PARAMS}: ${TiebaHeaders.NO_ST_PARAMS_TRUE}",
         "${TiebaHeaders.NO_COMMON_PARAMS}: ${Param.BDUSS},${Param.STOKEN}",
     )
     @GET("/mo/q/search/user")
-    fun searchUserFlow(
+    suspend fun searchUser(
         @Query("word") keyword: String,
         @Header("Referer") referer: String = "https://tieba.baidu.com/mo/q/hybrid/search?keyword=$keyword&_webview_time=${System.currentTimeMillis()}".urlEncode(),
-    ): Flow<SearchUserBean>
+    ): SearchUserBean
 
     @GET("/mo/q/newtopic/topicDetail")
     fun topicDetailFlow(
