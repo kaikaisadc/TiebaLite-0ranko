@@ -109,6 +109,7 @@ fun OKSignSettingsPage(settings: Settings<SignConfig>, onBack: () -> Unit) {
         group(title = R.string.settings_group_oksign) {
             toggleablePreference(
                 property = SignConfig::autoSign,
+                update = { settings, value -> settings.copy(autoSign = value) },
                 title = R.string.title_auto_sign,
                 summaryOn = R.string.summary_auto_sign_on,
                 summaryOff = R.string.summary_auto_sign,
@@ -136,6 +137,7 @@ fun OKSignSettingsPage(settings: Settings<SignConfig>, onBack: () -> Unit) {
 
             toggleablePreference(
                 property = SignConfig::autoSignSlow,
+                update = { settings, value -> settings.copy(autoSignSlow = value) },
                 title = R.string.title_oksign_slow_mode,
                 summaryOn = R.string.summary_oksign_slow_mode_on,
                 summaryOff = R.string.summary_oksign_slow_mode,
@@ -145,6 +147,7 @@ fun OKSignSettingsPage(settings: Settings<SignConfig>, onBack: () -> Unit) {
 
             toggleablePreference(
                 property = SignConfig::okSignOfficial,
+                update = { settings, value -> settings.copy(okSignOfficial = value) },
                 title = R.string.title_oksign_use_official_oksign,
                 summary = R.string.summary_oksign_use_official_oksign,
                 leadingIcon = Icons.Outlined.Speed,

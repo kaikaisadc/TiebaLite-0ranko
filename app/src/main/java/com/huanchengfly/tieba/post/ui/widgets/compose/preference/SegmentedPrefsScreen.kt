@@ -42,10 +42,7 @@ import com.huanchengfly.tieba.post.ui.widgets.compose.TimePickerDialog
 import com.huanchengfly.tieba.post.ui.widgets.compose.rememberDialogState
 import com.huanchengfly.tieba.post.utils.HmTime
 import kotlinx.coroutines.Dispatchers
-import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty1
-import kotlin.reflect.full.instanceParameter
-import kotlin.reflect.full.memberFunctions
 
 interface SegmentedPrefsScope{
 
@@ -162,6 +159,7 @@ interface SettingsSegmentedPrefsScope<T>: SegmentedPrefsScope {
      * Adds a toggleable preference to the [SegmentedPrefsScreen].
      *
      * @param property class property of settings [T].
+     * @param update creates a copy with the new value.
      * @param title preference title.
      * @param summary used to give some more information about what this preference is for
      * @param leadingIcon an optional composable representing the item's icon.
@@ -170,6 +168,7 @@ interface SettingsSegmentedPrefsScope<T>: SegmentedPrefsScope {
      */
     fun toggleablePreference(
         property: KProperty1<T, Boolean>,
+        update: (T, Boolean) -> T,
         title: Int,
         summary: Int? = null,
         leadingIcon: ImageVector? = null,
@@ -184,6 +183,7 @@ interface SettingsSegmentedPrefsScope<T>: SegmentedPrefsScope {
      * selected at one time.
      *
      * @param property class property of settings [T].
+     * @param update creates a copy with the new value.
      * @param title text which describes this preference.
      * @param options all available options of this preference with description.
      * @param optionsIconSupplier leading icon to be drawn at the beginning of option menu item.
@@ -196,6 +196,7 @@ interface SettingsSegmentedPrefsScope<T>: SegmentedPrefsScope {
      */
     fun <K> listPref(
         property: KProperty1<T, K>,
+        update: (T, K) -> T,
         @StringRes title: Int,
         options: Options<K>,
         optionsIconSupplier: (@Composable (K) -> Unit)? = null,
@@ -428,7 +429,7 @@ private open class SegmentedPrefsScopeImpl(
 private class SettingsSegmentedPrefsScopeImpl<T>(
     lazyListScope: LazyListScope,
     private val state: State<T>,
-    private val saver: SettingsSaver<T>,
+    private val settings: Settings<T>,
     scrollToItemKey: Any? = null,
     onScrollItemIndex: (Int) -> Unit = {},
 ): SettingsSegmentedPrefsScope<T>, SegmentedPrefsScopeImpl(lazyListScope, scrollToItemKey, onScrollItemIndex) {
@@ -438,6 +439,7 @@ private class SettingsSegmentedPrefsScopeImpl<T>(
 
     override fun toggleablePreference(
         property: KProperty1<T, Boolean>,
+        update: (T, Boolean) -> T,
         title: Int,
         summary: Int?,
         leadingIcon: ImageVector?,
@@ -451,7 +453,7 @@ private class SettingsSegmentedPrefsScopeImpl<T>(
                 title = title,
                 onClick = {
                     val newCheckedState = !checked
-                    this@SettingsSegmentedPrefsScopeImpl.saver.update(property, newCheckedState)
+                    settings.save { update(it, newCheckedState) }
                     onCheckedChange?.invoke(newCheckedState)
                 },
                 shapes = shapes,
@@ -473,6 +475,7 @@ private class SettingsSegmentedPrefsScopeImpl<T>(
 
     override fun <K> listPref(
         property: KProperty1<T, K>,
+        update: (T, K) -> T,
         @StringRes title: Int,
         options: Options<K>,
         optionsIconSupplier: (@Composable (K) -> Unit)?,
@@ -499,7 +502,7 @@ private class SettingsSegmentedPrefsScopeImpl<T>(
                 shapes = shapes,
                 enabled = enabled,
                 onValueChange = { newOption ->
-                    this@SettingsSegmentedPrefsScopeImpl.saver.update(property, newOption)
+                    settings.save { update(it, newOption) }
                     onValueChanged?.invoke(newOption)
                 },
             )
@@ -533,6 +536,7 @@ fun SegmentedPrefsScope.preference(
 
 fun <T> SettingsSegmentedPrefsScope<T>.toggleablePreference(
     property: KProperty1<T, Boolean>,
+    update: (T, Boolean) -> T,
     title: Int,
     summaryOn: Int,
     summaryOff: Int,
@@ -541,6 +545,7 @@ fun <T> SettingsSegmentedPrefsScope<T>.toggleablePreference(
 ) =
     toggleablePreference(
         property = property,
+        update = update,
         title = title,
         summary = if (property.get(currentPreference)) summaryOn else summaryOff,
         leadingIcon = leadingIcon,
@@ -562,7 +567,6 @@ fun <T> SegmentedPrefsScreen(
     val listState = rememberLazyListState()
     var scrollToIndex by remember { mutableStateOf<Int?>(null) }
 
-    val settingsSaver = remember { SettingsSaver(initialValue, settings) }
     val settingsState = settings.collectAsStateWithLifecycle(
         initialValue = initialValue,
         minActiveState = Lifecycle.State.CREATED,
@@ -579,7 +583,7 @@ fun <T> SegmentedPrefsScreen(
             val scope = SettingsSegmentedPrefsScopeImpl(
                 lazyListScope = this,
                 state = settingsState,
-                saver = settingsSaver,
+                settings = settings,
                 scrollToItemKey = scrollToItemKey,
                 onScrollItemIndex = { scrollToIndex = it },
             )
@@ -625,37 +629,5 @@ fun SegmentedTextPrefsScreen(
 
     LaunchedEffect(scrollToItemKey) {
         scrollToIndex?.let { listState.animateScrollToItem(it) }
-    }
-}
-
-private class SettingsSaver<T>(
-    initialValue: T,
-    private val save: (transform: (old: T) -> T) -> Unit,
-) {
-
-    private val copyFunc: KFunction<T>
-
-    constructor(initialValue: T, settings: Settings<T>): this(initialValue, settings::save)
-
-    init {
-        val kClass = initialValue!!::class
-        val func = kClass.memberFunctions
-            .firstOrNull { it.name == "copy" } ?: throw NullPointerException("copy() not found in $kClass")
-
-        @Suppress("UNCHECKED_CAST")
-        copyFunc = func as KFunction<T>
-    }
-
-    fun <V> update(property: KProperty1<T, V>, value: V) = save { old ->
-        val parameter = copyFunc.parameters.firstOrNull { it.name ==  property.name }
-        if (parameter == null) {
-            throw IllegalArgumentException("$property not exists in: $copyFunc")
-        }
-        // Creates a copy of the instance with updated property
-        // This is equal to old.copy(property = value)
-        copyFunc.callBy(mapOf(
-            copyFunc.instanceParameter!! to old,
-            parameter to value
-        ))
     }
 }

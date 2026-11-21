@@ -18,8 +18,6 @@ import com.huanchengfly.tieba.post.ui.page.Destination
 import com.huanchengfly.tieba.post.utils.loadPackageLabel
 import com.huanchengfly.tieba.post.utils.queryDeepLink
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.serializer
-import kotlin.reflect.full.createType
 
 class TiebaWebView(context: Context): WebView(context) {
 
@@ -32,7 +30,7 @@ class TiebaWebView(context: Context): WebView(context) {
         get() = measuredHeight < computeVerticalScrollRange()
 
     fun canNavigate(route: Destination): Boolean {
-        val jsonRoute = Json.encodeToString(serializer(route::class.createType()), route)
+        val jsonRoute = Json.encodeToString(Destination.serializer(), route)
         if (lastValidRoute == jsonRoute) {
             lastValidRoute = null
             if (canGoBack()) goBack()

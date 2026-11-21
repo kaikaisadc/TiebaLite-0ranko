@@ -109,6 +109,7 @@ fun MoreSettingsPage(
 
             listPref(
                 property = UpdateSettings::autoUpdateCheckInterval,
+                update = { settings, value -> settings.copy(autoUpdateCheckInterval = value) },
                 title = R.string.settings_auto_update_check_interval,
                 leadingIcon = Icons.Outlined.Refresh,
                 options = persistentMapOf(
@@ -123,6 +124,7 @@ fun MoreSettingsPage(
 
             toggleablePreference(
                 property = UpdateSettings::backgroundDownload,
+                update = { settings, value -> settings.copy(backgroundDownload = value) },
                 title = R.string.settings_update_background_download,
                 summary = R.string.summary_update_background_download,
                 leadingIcon = Icons.Outlined.Download,

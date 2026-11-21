@@ -65,6 +65,7 @@ fun SettingsSegmentedPrefsScope<PrivacySettings>.appLinkPreference() =
 fun SettingsSegmentedPrefsScope<PrivacySettings>.clipboardPreference() {
     toggleablePreference(
         property = PrivacySettings::readClipBoardLink,
+        update = { settings, value -> settings.copy(readClipBoardLink = value) },
         title = R.string.title_settings_clipboard_link,
         summary = R.string.summary_clipboard_link,
         leadingIcon = Icons.Outlined.ContentPasteSearch

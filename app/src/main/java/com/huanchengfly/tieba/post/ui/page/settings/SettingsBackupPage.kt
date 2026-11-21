@@ -176,12 +176,14 @@ fun SettingsBackupPage(
         group(title = R.string.settings_group_auto_backup) {
             toggleablePreference(
                 property = BackupSettings::autoBackupEnabled,
+                update = { settings, value -> settings.copy(autoBackupEnabled = value) },
                 title = R.string.settings_auto_backup_enabled,
                 leadingIcon = Icons.Outlined.Schedule,
             )
 
             toggleablePreference(
                 property = BackupSettings::autoBackupIncludeRules,
+                update = { settings, value -> settings.copy(autoBackupIncludeRules = value) },
                 title = R.string.settings_auto_backup_include_rules,
                 leadingIcon = Icons.Outlined.Shield,
                 enabled = currentPreference.autoBackupEnabled,
@@ -189,6 +191,7 @@ fun SettingsBackupPage(
 
             listPref(
                 property = BackupSettings::autoBackupInterval,
+                update = { settings, value -> settings.copy(autoBackupInterval = value) },
                 title = R.string.settings_auto_backup_interval,
                 leadingIcon = Icons.Outlined.Tune,
                 enabled = currentPreference.autoBackupEnabled,
@@ -201,6 +204,7 @@ fun SettingsBackupPage(
 
             listPref(
                 property = BackupSettings::autoBackupKeepCount,
+                update = { settings, value -> settings.copy(autoBackupKeepCount = value) },
                 title = R.string.settings_auto_backup_keep_count,
                 leadingIcon = Icons.Outlined.History,
                 enabled = currentPreference.autoBackupEnabled,

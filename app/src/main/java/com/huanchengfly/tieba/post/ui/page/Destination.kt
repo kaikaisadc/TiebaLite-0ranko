@@ -12,6 +12,7 @@ import com.huanchengfly.tieba.post.ui.page.thread.ThreadFrom
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
+@Serializable
 sealed interface Destination {
 
     @Serializable

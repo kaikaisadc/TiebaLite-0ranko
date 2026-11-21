@@ -186,9 +186,7 @@ dependencies {
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
-    implementation(libs.jetbrains.annotations)
     implementation(libs.kotlin.stdlib)
-    implementation(libs.kotlin.reflect)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.collections.immutable)
     // Required by Navigation Type-Safe
@@ -220,14 +218,13 @@ dependencies {
     implementation(libs.androidx.compose.material.iconsCore)
     // Optional - Add full set of material icons
     implementation(libs.androidx.compose.material.iconsExtended)
-    implementation(libs.androidx.compose.runtime.tracing)
+    add("composeTracingImplementation", libs.androidx.compose.runtime.tracing)
     implementation(libs.androidx.compose.ui.util)
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     implementation(libs.androidx.lifecycle.runtime.compose)
-    implementation(libs.androidx.lifecycle.service)
     implementation(libs.androidx.lifecycle.viewModel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.savedstate)
     implementation(project(":material-color-utilities"))

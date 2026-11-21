@@ -112,12 +112,14 @@ fun BlockSettingsPage(
         group(title = R.string.settings_group_block) {
             toggleablePreference(
                 property = BlockSettings::hideBlocked,
+                update = { settings, value -> settings.copy(hideBlocked = value) },
                 title = R.string.settings_hide_blocked_content,
                 leadingIcon = Icons.Outlined.HideSource
             )
 
             toggleablePreference(
                 property = BlockSettings::blockVideo,
+                update = { settings, value -> settings.copy(blockVideo = value) },
                 title = R.string.settings_block_video,
                 summary = R.string.settings_block_video_summary,
                 leadingIcon = Icons.Outlined.VideocamOff

@@ -93,6 +93,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::reduceMotion,
+                update = { settings, value -> settings.copy(reduceMotion = value) },
                 title = R.string.title_reduce_motion,
                 leadingIcon = Icons.Outlined.AutoAwesomeMotion,
             )
@@ -103,6 +104,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::darkAmoled,
+                update = { settings, value -> settings.copy(darkAmoled = value) },
                 title = R.string.title_settings_dark_amoled,
                 summary = R.string.summary_dark_amoled,
                 enabled = currentPreference.darkPreference != DarkPreference.DISABLED,
@@ -141,6 +143,7 @@ fun UISettingsPage(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 toggleablePreference(
                     property = UISettings::appIconThemed,
+                    update = { settings, value -> settings.copy(appIconThemed = value) },
                     onCheckedChange = { checked ->
                         val newIcon = when {
                             !currentPreference.appIcon.supportThemedIcon() -> null
@@ -164,6 +167,7 @@ fun UISettingsPage(
         group(title = R.string.settings_group_main_page) {
             toggleablePreference(
                 property = UISettings::bottomNavFloating,
+                update = { settings, value -> settings.copy(bottomNavFloating = value) },
                 title = R.string.settings_nav_floating,
                 summary = R.string.summary_nav_floating,
                 leadingIcon = if (currentPreference.bottomNavFloating) {
@@ -175,6 +179,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::bottomNavHideOnScroll,
+                update = { settings, value -> settings.copy(bottomNavHideOnScroll = value) },
                 title = R.string.settings_nav_hide_on_scroll,
                 summary = R.string.summary_nav_hide_on_scroll,
                 enabled = currentPreference.bottomNavFloating,
@@ -183,6 +188,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::refreshExploreOnBackToTopLongPress,
+                update = { settings, value -> settings.copy(refreshExploreOnBackToTopLongPress = value) },
                 title = R.string.settings_refresh_on_back_to_top_long_press,
                 summary = R.string.summary_refresh_on_back_to_top_long_press,
                 leadingIcon = Icons.Outlined.Refresh,
@@ -190,6 +196,7 @@ fun UISettingsPage(
 
             listPref(
                 property = UISettings::bottomNavLabel,
+                update = { settings, value -> settings.copy(bottomNavLabel = value) },
                 title = R.string.settings_nav_label,
                 leadingIcon = when (currentPreference.bottomNavLabel) {
                     NavigationLabel.ALWAYS -> Icons.AutoMirrored.Outlined.Label
@@ -205,6 +212,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::exploreFabFollowsNavigationBar,
+                update = { settings, value -> settings.copy(exploreFabFollowsNavigationBar = value) },
                 title = R.string.settings_explore_fab_follow_nav,
                 summary = R.string.summary_explore_fab_follow_nav,
                 enabled = currentPreference.bottomNavFloating &&
@@ -216,12 +224,14 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::showHistoryInHome,
+                update = { settings, value -> settings.copy(showHistoryInHome = value) },
                 title = R.string.settings_home_page_show_history_forum,
                 leadingIcon = Icons.Outlined.WatchLater
             )
 
             toggleablePreference(
                 property = UISettings::hideFollowedForumsInHistory,
+                update = { settings, value -> settings.copy(hideFollowedForumsInHistory = value) },
                 title = R.string.history_hide_followed_forums,
                 leadingIcon = Icons.Outlined.FilterAlt,
                 enabled = currentPreference.showHistoryInHome,
@@ -229,6 +239,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::historyLongPressDelete,
+                update = { settings, value -> settings.copy(historyLongPressDelete = value) },
                 title = R.string.settings_home_page_long_press_history_forum_delete,
                 leadingIcon = Icons.Outlined.Delete,
                 enabled = currentPreference.showHistoryInHome,
@@ -236,12 +247,14 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::hideExplore,
+                update = { settings, value -> settings.copy(hideExplore = value) },
                 title = R.string.title_hide_explore,
                 leadingIcon = toyFansIcon.imageVector,
             )
 
             toggleablePreference(
                 property = UISettings::hideNotifications,
+                update = { settings, value -> settings.copy(hideNotifications = value) },
                 title = R.string.title_hide_notifications,
                 leadingIcon = Icons.Outlined.NotificationsOff,
             )
@@ -250,6 +263,7 @@ fun UISettingsPage(
         group(title = R.string.settings_group_thread_detail) {
             listPref(
                 property = UISettings::fullscreenButtonStyle,
+                update = { settings, value -> settings.copy(fullscreenButtonStyle = value) },
                 title = R.string.settings_fullscreen_button_style,
                 leadingIcon = Icons.Rounded.Fullscreen,
                 options = persistentMapOf(
@@ -261,6 +275,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::commentNavEnabled,
+                update = { settings, value -> settings.copy(commentNavEnabled = value) },
                 title = R.string.settings_comment_nav_enabled,
                 summary = R.string.summary_comment_nav_enabled,
                 leadingIcon = Icons.Rounded.KeyboardArrowDown,
@@ -268,6 +283,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::commentNavSingleKey,
+                update = { settings, value -> settings.copy(commentNavSingleKey = value) },
                 title = R.string.settings_comment_nav_single_key,
                 summary = R.string.summary_comment_nav_single_key,
                 leadingIcon = Icons.Rounded.SwapVert,
@@ -276,6 +292,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::commentNavSingleKeyHoldToTop,
+                update = { settings, value -> settings.copy(commentNavSingleKeyHoldToTop = value) },
                 title = R.string.settings_comment_nav_single_key_hold_top,
                 summary = R.string.summary_comment_nav_single_key_hold_top,
                 leadingIcon = Icons.Rounded.VerticalAlignTop,
@@ -284,6 +301,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::commentNavEndHaptic,
+                update = { settings, value -> settings.copy(commentNavEndHaptic = value) },
                 title = R.string.settings_comment_nav_end_haptic,
                 summary = R.string.summary_comment_nav_end_haptic,
                 leadingIcon = Icons.Rounded.Vibration,
@@ -292,12 +310,14 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::subPostsInDualPane,
+                update = { settings, value -> settings.copy(subPostsInDualPane = value) },
                 title = R.string.settings_thread_subposts_keep_in_dual_pane,
                 leadingIcon = Icons.Outlined.ViewColumn,
             )
 
             toggleablePreference(
                 property = UISettings::compactReplyBar,
+                update = { settings, value -> settings.copy(compactReplyBar = value) },
                 title = R.string.settings_compact_reply_bar,
                 summary = R.string.summary_compact_reply_bar,
                 leadingIcon = Icons.Rounded.Compress,
@@ -305,6 +325,7 @@ fun UISettingsPage(
 
             listPref(
                 property = UISettings::compactReplyBarPosition,
+                update = { settings, value -> settings.copy(compactReplyBarPosition = value) },
                 title = R.string.settings_compact_reply_bar_position,
                 leadingIcon = Icons.Rounded.PictureInPictureAlt,
                 enabled = currentPreference.compactReplyBar,
@@ -316,6 +337,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::compactShowCollect,
+                update = { settings, value -> settings.copy(compactShowCollect = value) },
                 title = R.string.settings_compact_show_collect,
                 summary = R.string.summary_compact_show_collect,
                 leadingIcon = Icons.Rounded.Star,
@@ -326,6 +348,7 @@ fun UISettingsPage(
         group(title = R.string.settings_group_large_screen) {
             listPref(
                 property = UISettings::forumDetailMode,
+                update = { settings, value -> settings.copy(forumDetailMode = value) },
                 title = R.string.settings_forum_detail_mode,
                 leadingIcon = Icons.Outlined.ViewColumn,
                 options = persistentMapOf(
@@ -338,6 +361,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::largeScreenDefaultSplit,
+                update = { settings, value -> settings.copy(largeScreenDefaultSplit = value) },
                 title = R.string.settings_large_screen_default_split,
                 summary = R.string.summary_large_screen_default_split,
                 leadingIcon = Icons.Outlined.ViewColumn,
@@ -345,6 +369,7 @@ fun UISettingsPage(
 
             toggleablePreference(
                 property = UISettings::forumDefaultSplit,
+                update = { settings, value -> settings.copy(forumDefaultSplit = value) },
                 title = R.string.settings_forum_default_split,
                 summary = R.string.summary_forum_default_split,
                 leadingIcon = Icons.Outlined.ViewAgenda,
@@ -353,6 +378,7 @@ fun UISettingsPage(
 
             listPref(
                 property = UISettings::appNavRailPosition,
+                update = { settings, value -> settings.copy(appNavRailPosition = value) },
                 title = R.string.settings_app_nav_rail_position,
                 leadingIcon = Icons.Rounded.VerticalAlignTop,
                 options = persistentMapOf(
@@ -366,6 +392,7 @@ fun UISettingsPage(
         group(title = R.string.settings_group_foldable) {
             toggleablePreference(
                 property = UISettings::foldToPortrait,
+                update = { settings, value -> settings.copy(foldToPortrait = value) },
                 title = R.string.settings_fold_to_portrait,
                 summary = R.string.summary_fold_to_portrait,
                 leadingIcon = Icons.Rounded.ScreenRotation,
@@ -377,6 +404,7 @@ fun UISettingsPage(
 fun SettingsSegmentedPrefsScope<UISettings>.darkImagePreference() {
     toggleablePreference(
         property = UISettings::darkenImage,
+        update = { settings, value -> settings.copy(darkenImage = value) },
         title = R.string.settings_image_darken_when_night_mode,
         leadingIcon = Icons.Outlined.NightsStay,
         enabled = currentPreference.darkPreference != DarkPreference.DISABLED
@@ -386,6 +414,7 @@ fun SettingsSegmentedPrefsScope<UISettings>.darkImagePreference() {
 fun SettingsSegmentedPrefsScope<UISettings>.darkThemeModePreference() {
     listPref(
         property = UISettings::darkPreference,
+        update = { settings, value -> settings.copy(darkPreference = value) },
         title = R.string.title_settings_night_mode,
         leadingIcon = Icons.Outlined.DarkMode,
         options = persistentMapOf(
@@ -402,6 +431,7 @@ fun SettingsSegmentedPrefsScope<UISettings>.darkThemeModePreference() {
 fun SettingsSegmentedPrefsScope<UISettings>.forumListPreference() {
     toggleablePreference(
         property = UISettings::homeForumList,
+        update = { settings, value -> settings.copy(homeForumList = value) },
         title = R.string.settings_forum_single,
         leadingIcon = if (currentPreference.homeForumList) {
             Icons.Outlined.ViewAgenda
@@ -415,6 +445,7 @@ fun SettingsSegmentedPrefsScope<UISettings>.forumListPreference() {
 fun SettingsSegmentedPrefsScope<UISettings>.reduceEffectPreference() {
     toggleablePreference(
         property = UISettings::reduceEffect,
+        update = { settings, value -> settings.copy(reduceEffect = value) },
         title = R.string.title_reduce_effect,
         leadingIcon = Icons.Outlined.BlurOn,
     )

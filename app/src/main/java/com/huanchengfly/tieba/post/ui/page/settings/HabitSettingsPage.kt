@@ -46,6 +46,7 @@ fun HabitSettingsPage(
 
             listPref(
                 property = HabitSettings::imageWatermarkType,
+                update = { settings, value -> settings.copy(imageWatermarkType = value) },
                 title = R.string.title_settings_image_watermark,
                 options = persistentMapOf(
                     WaterType.NO to R.string.title_image_watermark_none,
@@ -57,6 +58,7 @@ fun HabitSettingsPage(
 
             listPref(
                 property = HabitSettings::mediaDisplayMode,
+                update = { settings, value -> settings.copy(mediaDisplayMode = value) },
                 title = R.string.settings_media_display_mode,
                 leadingIcon = Icons.Rounded.UnfoldLess,
                 options = persistentMapOf(
@@ -68,6 +70,7 @@ fun HabitSettingsPage(
 
             toggleablePreference(
                 property = HabitSettings::compactSingleAsGridCell,
+                update = { settings, value -> settings.copy(compactSingleAsGridCell = value) },
                 title = R.string.settings_compact_single_as_grid,
                 summary = R.string.summary_compact_single_as_grid,
                 leadingIcon = Icons.Outlined.PhotoSizeSelectActual,
@@ -76,6 +79,7 @@ fun HabitSettingsPage(
 
             toggleablePreference(
                 property = HabitSettings::videoAutoplay,
+                update = { settings, value -> settings.copy(videoAutoplay = value) },
                 title = R.string.settings_video_autoplay,
                 leadingIcon = Icons.Rounded.Autoplay,
                 enabled = currentPreference.mediaDisplayMode != MediaDisplayMode.HIDE,
@@ -86,6 +90,7 @@ fun HabitSettingsPage(
             forumSortPreference()
             toggleablePreference(
                 property = HabitSettings::forumFabQuickRefresh,
+                update = { settings, value -> settings.copy(forumFabQuickRefresh = value) },
                 title = R.string.settings_forum_fab_quick_refresh,
                 summary = R.string.summary_forum_fab_quick_refresh,
                 leadingIcon = Icons.Rounded.Refresh,
@@ -95,6 +100,7 @@ fun HabitSettingsPage(
         group(title = R.string.settings_group_thread) {
             toggleablePreference(
                 property = HabitSettings::showBothName,
+                update = { settings, value -> settings.copy(showBothName = value) },
                 title = R.string.title_show_both_username_and_nickname,
                 leadingIcon = Icons.Outlined.Verified
             )
@@ -111,6 +117,7 @@ fun HabitSettingsPage(
 
             toggleablePreference(
                 property = HabitSettings::favoriteDesc,
+                update = { settings, value -> settings.copy(favoriteDesc = value) },
                 title = R.string.settings_collect_thread_desc_sort,
                 leadingIcon = Icons.AutoMirrored.Rounded.Sort,
                 summaryOn = R.string.tip_collect_thread_desc_sort_on,
@@ -123,6 +130,7 @@ fun HabitSettingsPage(
 
             toggleablePreference(
                 property = HabitSettings::hideReplyWarning,
+                update = { settings, value -> settings.copy(hideReplyWarning = value) },
                 title = R.string.title_hide_reply_warning,
                 enabled = !currentPreference.hideReply,
                 leadingIcon = Icons.Outlined.SecurityUpdateWarning
@@ -134,6 +142,7 @@ fun HabitSettingsPage(
 fun SettingsSegmentedPrefsScope<HabitSettings>.imageLoadPreference() {
     listPref(
         property = HabitSettings::imageLoadType,
+        update = { settings, value -> settings.copy(imageLoadType = value) },
         title = R.string.title_settings_image_load_type,
         options = persistentMapOf(
             ImageUtil.SETTINGS_SMART_ORIGIN to R.string.title_image_load_type_smart_origin,
@@ -147,6 +156,7 @@ fun SettingsSegmentedPrefsScope<HabitSettings>.imageLoadPreference() {
 fun SettingsSegmentedPrefsScope<HabitSettings>.forumSortPreference() {
     listPref(
         property = HabitSettings::forumSortType,
+        update = { settings, value -> settings.copy(forumSortType = value) },
         title = R.string.title_settings_default_sort_type,
         options = persistentMapOf(
             ForumSortType.BY_REPLY to R.string.title_sort_by_reply,
@@ -159,6 +169,7 @@ fun SettingsSegmentedPrefsScope<HabitSettings>.forumSortPreference() {
 fun SettingsSegmentedPrefsScope<HabitSettings>.collectSeeLzPreference() {
     toggleablePreference(
         property = HabitSettings::favoriteSeeLz,
+        update = { settings, value -> settings.copy(favoriteSeeLz = value) },
         title = R.string.settings_collect_thread_see_lz,
         leadingIcon = Icons.Outlined.StarOutline,
         summaryOn = R.string.tip_collect_thread_see_lz_on,
@@ -169,6 +180,7 @@ fun SettingsSegmentedPrefsScope<HabitSettings>.collectSeeLzPreference() {
 fun SettingsSegmentedPrefsScope<HabitSettings>.hideReplyPreference() {
     toggleablePreference(
         property = HabitSettings::hideReply,
+        update = { settings, value -> settings.copy(hideReply = value) },
         title = R.string.title_hide_reply,
         leadingIcon = Icons.Outlined.SpeakerNotesOff
     )
