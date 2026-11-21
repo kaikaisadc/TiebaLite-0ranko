@@ -21,7 +21,9 @@ import com.huanchengfly.tieba.post.utils.extension.set
 import com.huanchengfly.tieba.post.utils.JobQueue
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +44,7 @@ class PhotoViewViewModel : ViewModel(), DataProvider {
 
     private val queue = JobQueue()
 
+    private var initialized = false
     private var data: LoadPicPageData? = null
 
     private fun List<PicPageBean.PicBean>.toUniquePhotoViewItems(old: List<PhotoViewItem>): List<PhotoViewItem> {
@@ -52,77 +55,68 @@ class PhotoViewViewModel : ViewModel(), DataProvider {
     }
 
     fun initData(viewData: PhotoViewData) {
-        if (this.data != null) return
-        this.data = viewData.data
+        if (initialized) return
+        initialized = true
 
-        if (viewData.data == null) {
-             _state.set {
-                 copy(
-                     data = viewData.picItems
-                         .mapIndexed { i, item -> PhotoViewItem(item = item, overallIndex = i + 1) },
-                     totalAmount = viewData.picItems.size,
-                     initialIndex = viewData.index
-                 )
-             }
-        } else {
-            viewModelScope.launch(Dispatchers.Default + handler) {
-                val picPageBean = viewData.data
-                    .toPageFlow(viewData.data.picId, viewData.data.picIndex, prev = false)
-                    .firstOrThrow()
+        val localState = PhotoViewUiState(
+            data = viewData.picItems.mapIndexed { index, item ->
+                PhotoViewItem(item = item, overallIndex = index + 1)
+            },
+            totalAmount = viewData.picItems.size,
+            initialIndex = viewData.index.coerceIn(0, viewData.picItems.lastIndex.coerceAtLeast(0)),
+        )
+        val pageData = viewData.data
+        data = pageData
+        if (pageData == null) {
+            _state.value = localState
+            return
+        }
 
-                val stateSnapshot = _state.first()
-                val picAmount = picPageBean.picAmount ?: throw TiebaException("加载列表失败, 远古坟贴?")
-                val picList = picPageBean.picList.orEmpty()
-                val fetchedItems = picList.toUniquePhotoViewItems(old = stateSnapshot.data)
-                if (fetchedItems.isEmpty()) throw TiebaException("加载图片列表失败")
-                val firstItemIndex = fetchedItems.first().overallIndex
-                val localItems =
-                    if (viewData.data.picIndex == 1) emptyList() else viewData.picItems.subList(
-                        0,
-                        viewData.data.picIndex - 1
-                    ).mapIndexed { index, item ->
-                        PhotoViewItem(
-                            item = item,
-                            overallIndex = firstItemIndex - (viewData.data.picIndex - 1 - index),
-                        )
-                    }
-                val items = localItems + fetchedItems
-                val hasNext = items.last().overallIndex < picAmount
-                val hasPrev = items.first().overallIndex > 1
-                val initialIndex: Int? = items
-                    .indexOfFirst { it.picId == viewData.data.picId }
-                    .takeIf { it != -1 }
-                val newState = PhotoViewUiState(
-                    data = items.toImmutableList(),
-                    hasNext = hasNext,
-                    hasPrev = hasPrev,
-                    totalAmount = picAmount,
-                    initialIndex = initialIndex ?: (viewData.data.picIndex - 1),
-                )
-
-                withContext(Dispatchers.Main.immediate) {
-                    data = viewData.data
-                    _state.set { newState }
-                }
+        viewModelScope.launch(Dispatchers.Default + handler) {
+            val newState = try {
+                loadInitialPage(pageData, localState)
+            } catch (e: Exception) {
+                if (e is CancellationException || localState.data.isEmpty()) throw e
+                localState
             }
+            ensureActive()
+            _state.value = newState
         }
     }
 
-    override fun loadInitial(): List<Photo> {
-        val stateSnapshot = _state.value
-        require(data != null || stateSnapshot.data.isNotEmpty()) {
-            "ViewModel is uninitialized!, call initData before load"
-        }
+    private suspend fun loadInitialPage(
+        pageData: LoadPicPageData,
+        localState: PhotoViewUiState,
+    ): PhotoViewUiState {
+        val picPage = pageData.toPageFlow(pageData.picId, pageData.picIndex, prev = false)
+            .firstOrThrow()
+        val totalAmount = picPage.picAmount ?: throw TiebaException("加载列表失败, 远古坟贴?")
+        val fetchedItems = picPage.picList.orEmpty().toUniquePhotoViewItems(old = emptyList())
+        val selectedIndex = fetchedItems.indexOfFirst { it.picId == pageData.picId }
+        if (selectedIndex < 0) throw TiebaException("加载图片列表失败")
 
-        val items = stateSnapshot.data
-        val initIndex = stateSnapshot.initialIndex
-        return if (initIndex != 0) {
-            // Trim out items before initial index
-            // Basically the same with [ViewPager.setCurrentItem()]
-            items.subList(initIndex, items.size)
-        } else {
-            stateSnapshot.data
+        val firstItemIndex = fetchedItems.first().overallIndex
+        val fetchedIds = fetchedItems.mapTo(HashSet()) { it.picId }
+        val precedingItems = localState.data.take(localState.initialIndex)
+            .filterNot { it.picId in fetchedIds }
+            .takeLast((firstItemIndex - 1).coerceAtLeast(0))
+        val localItems = precedingItems.mapIndexed { index, item ->
+            item.copy(overallIndex = firstItemIndex - precedingItems.size + index)
         }
+        val items = localItems + fetchedItems
+        return PhotoViewUiState(
+            data = items.toImmutableList(),
+            hasNext = items.last().overallIndex < totalAmount,
+            hasPrev = items.first().overallIndex > 1,
+            totalAmount = totalAmount,
+            initialIndex = localItems.size + selectedIndex,
+        )
+    }
+
+    override fun loadInitial(): List<Photo> {
+        val state = _state.value
+        require(state.data.isNotEmpty()) { "Call initData before loading photos" }
+        return state.data.drop(state.initialIndex)
     }
 
     override fun loadBefore(key: Long, callback: (List<Photo>) -> Unit) {

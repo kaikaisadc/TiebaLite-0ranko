@@ -23,7 +23,9 @@ import coil3.imageLoader
 import com.github.iielse.imageviewer.ImageViewerDialogFragment
 import com.github.iielse.imageviewer.core.Components
 import com.github.iielse.imageviewer.core.OverlayCustomizer
+import com.github.iielse.imageviewer.core.Photo
 import com.github.iielse.imageviewer.core.Transformer
+import com.github.iielse.imageviewer.core.VHCustomizer
 import com.github.iielse.imageviewer.core.ViewerCallback
 import com.github.iielse.imageviewer.utils.Config
 import com.huanchengfly.tieba.post.R
@@ -39,6 +41,7 @@ import com.huanchengfly.tieba.post.utils.ImageUtil
 import com.huanchengfly.tieba.post.utils.extension.getParcelableExtraCompat
 import com.huanchengfly.tieba.post.utils.extension.toShareIntent
 import kotlinx.coroutines.launch
+import java.util.WeakHashMap
 
 class PhotoViewActivity : AppCompatActivity(), OverlayCustomizer, ViewerCallback {
 
@@ -50,7 +53,8 @@ class PhotoViewActivity : AppCompatActivity(), OverlayCustomizer, ViewerCallback
         WindowCompat.getInsetsController(window, window.decorView)
     }
 
-    private var currentPage: Int = 0
+    private val boundPhotos = WeakHashMap<RecyclerView.ViewHolder, PhotoViewItem>()
+    private var currentItem: PhotoViewItem? = null
 
     private lateinit var appbar: LinearLayout
     private var toolbar: Toolbar? = null
@@ -60,7 +64,12 @@ class PhotoViewActivity : AppCompatActivity(), OverlayCustomizer, ViewerCallback
         setContentView(R.layout.activity_photo_view)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        val data: PhotoViewData = intent.getParcelableExtraCompat(EXTRA_PHOTO_VIEW_DATA)!!
+        val data = intent.getParcelableExtraCompat<PhotoViewData>(EXTRA_PHOTO_VIEW_DATA)
+        if (data == null || (data.data == null && data.picItems.isEmpty())) {
+            toastShort(R.string.desc_image_empty_url)
+            finish()
+            return
+        }
 
         viewModel.initData(data)
         viewModel.state.collectIn(this) { uiState ->
@@ -80,7 +89,11 @@ class PhotoViewActivity : AppCompatActivity(), OverlayCustomizer, ViewerCallback
             Config.VIEWER_BACKGROUND_COLOR = Color.TRANSPARENT
             Config.SWIPE_DISMISS = false
 
-            if (Components.working) finish()
+            if (Components.working) {
+                finish()
+                return@collectIn
+            }
+            currentItem = uiState.data.getOrNull(uiState.initialIndex)
             Components.initialize(
                 imageLoader = SimpleImageLoader(
                     lifecycle = lifecycle,
@@ -92,6 +105,11 @@ class PhotoViewActivity : AppCompatActivity(), OverlayCustomizer, ViewerCallback
             )
             Components.setViewerCallback(this)
             Components.setOverlayCustomizer(overlayCustomizer)
+            Components.setVHCustomizer(object : VHCustomizer {
+                override fun bind(type: Int, data: Photo, viewHolder: RecyclerView.ViewHolder) {
+                    boundPhotos[viewHolder] = data as PhotoViewItem
+                }
+            })
 
             supportFragmentManager.beginTransaction()
                 .add(android.R.id.content, ImageViewerFragment())
@@ -124,6 +142,7 @@ class PhotoViewActivity : AppCompatActivity(), OverlayCustomizer, ViewerCallback
                 navigationIcon?.setTint(Color.WHITE)
                 setOnMenuItemClickListener(this@PhotoViewActivity::onOptionsItemSelected)
             }
+            updateToolbarTitle()
             return view
         }
     }
@@ -132,7 +151,7 @@ class PhotoViewActivity : AppCompatActivity(), OverlayCustomizer, ViewerCallback
         when (item.itemId) {
             R.id.menu_share -> onShareImage()
 
-            R.id.menu_download -> ImageUtil.download(this, url = getCurrentItem()?.originUrl)
+            R.id.menu_download -> ImageUtil.download(this, url = currentItem?.originUrl)
 
             else -> return super.onOptionsItemSelected(item)
         }
@@ -157,7 +176,7 @@ class PhotoViewActivity : AppCompatActivity(), OverlayCustomizer, ViewerCallback
     }
 
     private fun onShareImage() {
-        val currentImg = getCurrentItem() ?: return
+        val currentImg = currentItem ?: return
         toastShort(R.string.toast_preparing_share_pic)
         lifecycleScope.launch {
             ImageUtil.downloadForShare(applicationContext, currentImg.originUrl)
@@ -172,15 +191,14 @@ class PhotoViewActivity : AppCompatActivity(), OverlayCustomizer, ViewerCallback
     }
 
     override fun onPageSelected(position: Int, viewHolder: RecyclerView.ViewHolder) {
-        currentPage = position
-        toolbar?.let {
-            val state = viewModel.state.value
-            val currentItem = state.data[position]
-            it.title = "${currentItem.overallIndex} / ${state.totalAmount}"
-        }
+        currentItem = boundPhotos[viewHolder] ?: return
+        updateToolbarTitle()
     }
 
-    private fun getCurrentItem(): PhotoViewItem? = viewModel.state.value.data.getOrNull(currentPage)
+    private fun updateToolbarTitle() {
+        val item = currentItem ?: return
+        toolbar?.title = "${item.overallIndex} / ${viewModel.state.value.totalAmount}"
+    }
 
     companion object {
 
