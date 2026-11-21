@@ -17,7 +17,6 @@ import com.huanchengfly.tieba.post.R
 import com.huanchengfly.tieba.post.api.models.AddThreadBean
 import com.huanchengfly.tieba.post.api.models.UploadPictureResultBean
 import com.huanchengfly.tieba.post.api.models.protos.addPost.AddPostResponse
-import com.huanchengfly.tieba.post.api.retrofit.exception.TiebaUnknownException
 import com.huanchengfly.tieba.post.api.retrofit.exception.getErrorCode
 import com.huanchengfly.tieba.post.api.retrofit.exception.getErrorMessage
 import com.huanchengfly.tieba.post.arch.BaseViewModel
@@ -169,9 +168,8 @@ class ReplyViewModel @Inject constructor(
                         isTitle = if (title.isNullOrEmpty()) 1 else 0,
                     )
                     .map<AddThreadBean, ReplyPartialChange.Send> {
-                        if (it.tid == null) throw TiebaUnknownException
                         ReplyPartialChange.Send.Success(
-                            threadId = it.tid!!,
+                            threadId = it.tid.orEmpty(),
                             postId = it.pid.orEmpty(),
                             expInc = ""
                         )
@@ -200,11 +198,11 @@ class ReplyViewModel @Inject constructor(
                     replyUserId = replyUserId
                 )
                 .map<AddPostResponse, ReplyPartialChange.Send> {
-                    if (it.data_ == null) throw TiebaUnknownException
+                    val data = it.data_
                     ReplyPartialChange.Send.Success(
-                        threadId = it.data_.tid,
-                        postId = it.data_.pid,
-                        expInc = it.data_.exp?.inc.orEmpty()
+                        threadId = data?.tid?.takeIf(String::isNotEmpty) ?: threadId.toString(),
+                        postId = data?.pid.orEmpty(),
+                        expInc = data?.exp?.inc.orEmpty()
                     )
                 }
                 .onStart { emit(ReplyPartialChange.Send.Start) }

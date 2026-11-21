@@ -14,8 +14,16 @@ class MessageListAdapter : JsonDeserializer<List<MessageInfoBean>> {
         typeOfT: Type,
         context: JsonDeserializationContext
     ): List<MessageInfoBean> {
-        return if (json.isJsonPrimitive) {
-            ArrayList()
-        } else context.deserialize(json, typeOfT)
+        if (!json.isJsonArray) return emptyList()
+        return json.asJsonArray.mapNotNull { entry ->
+            if (!entry.isJsonObject) return@mapNotNull null
+            try {
+                context.deserialize<MessageInfoBean>(entry, MessageInfoBean::class.java)
+            } catch (_: JsonParseException) {
+                null
+            } catch (_: IllegalStateException) {
+                null
+            }
+        }
     }
 }

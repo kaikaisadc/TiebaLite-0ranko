@@ -44,6 +44,7 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.wire.WireConverterFactory
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -55,6 +56,7 @@ object RetrofitTiebaApi {
     private const val READ_TIMEOUT = 60L
     private const val CONNECT_TIMEOUT = 60L
     private const val WRITE_TIMEOUT = 60L
+    private const val CLIENT_BASE_URL = "https://c.tieba.baidu.com/"
 
     private val initTime = System.currentTimeMillis()
     internal val randomClientId = "wappc_${initTime}_${(Math.random() * 1000).roundToInt()}"
@@ -80,9 +82,15 @@ object RetrofitTiebaApi {
     private val gsonConverterFactory = GsonConverterFactory.create()
     private val sortAndSignInterceptor = SortAndSignInterceptor("tiebaclient!!!")
 
+    private val securedRequest = Interceptor { chain ->
+        val request = chain.request()
+        if (!request.url.isHttps) throw IOException("Tieba API requests require HTTPS")
+        AccountUtil.withRequestAccount { chain.proceed(request) }
+    }
+
     val NEW_TIEBA_API: NewTiebaApi by lazy {
         createJsonApi<NewTiebaApi>(
-            "http://c.tieba.baidu.com/",
+            CLIENT_BASE_URL,
             defaultCommonHeaderInterceptor,
             CommonHeaderInterceptor(
                 Header.USER_AGENT to { "bdtb for Android 8.2.2" },
@@ -155,7 +163,7 @@ object RetrofitTiebaApi {
 
     val MINI_TIEBA_API: MiniTiebaApi by lazy {
         createJsonApi<MiniTiebaApi>(
-            "http://c.tieba.baidu.com/",
+            CLIENT_BASE_URL,
             defaultCommonHeaderInterceptor,
             CommonHeaderInterceptor(
                 Header.USER_AGENT to { "bdtb for Android 7.2.0.0" },
@@ -176,7 +184,7 @@ object RetrofitTiebaApi {
 
     val OFFICIAL_TIEBA_API: OfficialTiebaApi by lazy {
         createJsonApi<OfficialTiebaApi>(
-            "http://c.tieba.baidu.com/",
+            CLIENT_BASE_URL,
             CommonHeaderInterceptor(
                 Header.USER_AGENT to { "bdtb for Android 12.41.7.1" },
                 Header.COOKIE to { "CUID=${CuidUtils.getNewCuid()};ka=open;TBBRAND=${Build.MODEL};BAIDUID=${ClientUtils.baiduId};" },
@@ -398,6 +406,8 @@ object RetrofitTiebaApi {
         .addConverterFactory(json.asConverterFactory())
         .addConverterFactory(gsonConverterFactory)
         .client(OkHttpClient.Builder().apply {
+            followSslRedirects(false)
+            addInterceptor(securedRequest)
             readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
             connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)
             writeTimeout(WRITE_TIMEOUT, TimeUnit.SECONDS)
@@ -424,6 +434,8 @@ object RetrofitTiebaApi {
         .addConverterFactory(NullOnEmptyConverterFactory())
         .addConverterFactory(WireConverterFactory.create())
         .client(OkHttpClient.Builder().apply {
+            followSslRedirects(false)
+            addInterceptor(securedRequest)
             readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
             connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)
             writeTimeout(WRITE_TIMEOUT, TimeUnit.SECONDS)

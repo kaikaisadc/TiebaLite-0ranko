@@ -142,10 +142,7 @@ object ImageUtil {
         try {
             // Check downloaded
             if (!destFile.exists() || destFile.length() < 1) {
-                withContext(Dispatchers.IO) {
-                    val coilCache = CoilUtil.downloadCancelable(context, url)
-                    coilCache.copyTo(destFile, overwrite = true)
-                }
+                CoilUtil.withDownloadedImage(context, url) { it.copyTo(destFile, overwrite = true) }
             }
 
             val uri = FileProvider.getUriForFile(context,
@@ -190,26 +187,27 @@ object ImageUtil {
         var uri: Uri? = null
         withContext(Dispatchers.IO) {
             try {
-                val coilCache = CoilUtil.downloadCancelable(context, url)
-                var mimeType = MimeTypes.IMAGE_JPEG
-                var fileName = URLUtil.guessFileName(url, null, mimeType)
-                if (isGifFile(coilCache)) {
-                    mimeType = MIME_TYPE_GIF
-                    fileName = FileUtil.changeFileExtension(fileName, ".gif")
-                }
+                val relativePath = Environment.DIRECTORY_PICTURES + File.separator + FileUtil.FILE_FOLDER
+                CoilUtil.withDownloadedImage(context, url) { coilCache ->
+                    var mimeType = MimeTypes.IMAGE_JPEG
+                    var fileName = URLUtil.guessFileName(url, null, mimeType)
+                    if (isGifFile(coilCache)) {
+                        mimeType = MIME_TYPE_GIF
+                        fileName = FileUtil.changeFileExtension(fileName, ".gif")
+                    }
 
-                val relativePath =
-                    Environment.DIRECTORY_PICTURES + File.separator + FileUtil.FILE_FOLDER
-                val values = ContentValues().apply {
-                    put(MediaStore.Images.Media.RELATIVE_PATH, relativePath)
-                    put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
-                    put(MediaStore.Images.Media.MIME_TYPE, mimeType)
-                    put(MediaStore.Images.Media.DESCRIPTION, fileName)
-                }
+                    val values = ContentValues().apply {
+                        put(MediaStore.Images.Media.RELATIVE_PATH, relativePath)
+                        put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                        put(MediaStore.Images.Media.MIME_TYPE, mimeType)
+                        put(MediaStore.Images.Media.DESCRIPTION, fileName)
+                    }
 
-                uri = cr.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)!!
-                cr.openOutputStream(uri).use { out ->
-                    Files.copy(coilCache.toPath(), out)
+                    val outputUri = cr.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                        ?: throw IOException("Unable to create image in MediaStore")
+                    uri = outputUri
+                    val output = cr.openOutputStream(outputUri) ?: throw IOException("Unable to save image")
+                    output.use { Files.copy(coilCache.toPath(), it) }
                 }
                 withContext(Dispatchers.Main) {
                     context.toastShort(R.string.toast_photo_saved, relativePath)
@@ -230,27 +228,30 @@ object ImageUtil {
         withContext(Dispatchers.IO) {
             var destFile: File? = null
             try {
-                val coilCache = CoilUtil.downloadCancelable(context, url)
-                val mimeType = MimeTypes.IMAGE_JPEG
-                val fileName = URLUtil.guessFileName(url, null, mimeType)
-                val pictureFolder =
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                val appDir = File(pictureFolder, FileUtil.FILE_FOLDER)
-                destFile = if (isGifFile(coilCache)) {
-                    File(appDir, FileUtil.changeFileExtension(fileName, ".gif"))
-                } else {
-                    File(appDir, fileName)
-                }
+                val file = CoilUtil.withDownloadedImage(context, url) { coilCache ->
+                    val mimeType = MimeTypes.IMAGE_JPEG
+                    val fileName = URLUtil.guessFileName(url, null, mimeType)
+                    val pictureFolder =
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                    val appDir = File(pictureFolder, FileUtil.FILE_FOLDER)
+                    val file = if (isGifFile(coilCache)) {
+                        File(appDir, FileUtil.changeFileExtension(fileName, ".gif"))
+                    } else {
+                        File(appDir, fileName)
+                    }
 
-                destFile.ensureParents()
-                destFile.sink().buffer().use { bufferedSink ->
-                    bufferedSink.writeAll(coilCache.source())
+                    destFile = file
+                    file.ensureParents()
+                    file.sink().buffer().use { bufferedSink ->
+                        coilCache.source().use { bufferedSink.writeAll(it) }
+                    }
+                    file
                 }
                 withContext(Dispatchers.Main) {
                     context.sendBroadcast(
-                        Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(destFile))
+                        Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file))
                     )
-                    context.toastShort(R.string.toast_photo_saved, destFile.path)
+                    context.toastShort(R.string.toast_photo_saved, file.path)
                 }
             } catch (e: Exception) {
                 destFile?.deleteQuietly() // Delete file if error occurred

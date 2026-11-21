@@ -1,10 +1,6 @@
 package com.huanchengfly.tieba.post.ui.page.threadstore
 
 import androidx.compose.runtime.Immutable
-import androidx.compose.ui.util.fastFilter
-import androidx.compose.ui.util.fastMap
-import androidx.compose.ui.util.fastMapNotNull
-import androidx.lifecycle.viewModelScope
 import com.huanchengfly.tieba.post.api.retrofit.exception.getErrorMessage
 import com.huanchengfly.tieba.post.arch.BaseStateViewModel
 import com.huanchengfly.tieba.post.arch.CommonUiEvent
@@ -13,10 +9,10 @@ import com.huanchengfly.tieba.post.arch.UiState
 import com.huanchengfly.tieba.post.repository.ThreadStoreRepository
 import com.huanchengfly.tieba.post.ui.models.ThreadStore
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 @Immutable
@@ -48,8 +44,11 @@ class ThreadStoreViewModel @Inject constructor(
         }
     }
 
+    private val requests = Mutex()
+    private var loadJob: Job? = null
+
     init {
-        refreshInternal()
+        onRefresh()
     }
 
     override fun createInitialState(): ThreadStoreUiState = ThreadStoreUiState()
@@ -69,79 +68,65 @@ class ThreadStoreViewModel @Inject constructor(
         listRestoreOffset = offset
     }
 
-    private fun refreshInternal(): Unit = launchInVM {
-        _uiState.update { ThreadStoreUiState(isRefreshing = true) }
-        val data = threadStoreRepo.load()
-        // 数据被重置, 滚动位置记忆一并作废(页面重建后从顶部开始)
-        listRestoreIndex = 0
-        listRestoreOffset = 0
-        _uiState.update {
-            ThreadStoreUiState(currentPage = 0, data = data, hasMore = data.hasMore)
-        }
-    }
-
     fun onRefresh() {
-        if (currentState.isRefreshing) return else refreshInternal()
+        if (currentState.isRefreshing) return
+        loadJob?.cancel()
+        _uiState.update { it.copy(isRefreshing = true, isLoadingMore = false, error = null) }
+        loadJob = launchJobInVM {
+            requests.withLock {
+                val data = threadStoreRepo.load()
+                saveListPosition(0, 0)
+                _uiState.update { ThreadStoreUiState(data = data, hasMore = data.hasMore) }
+            }
+        }
     }
 
     fun onLoadMore() {
-        val oldState = currentState
-        if (oldState.isLoadingMore || !oldState.hasMore) {
-            return
-        } else {
-            _uiState.update { oldState.copy(isLoadingMore = true) }
-        }
-        launchInVM {
-            val nextPage = oldState.currentPage + 1
-            val data = threadStoreRepo.load(page = nextPage)
-            if (data.isEmpty()) {
-                _uiState.update { it.copy(isLoadingMore = false, hasMore = false) }
-            } else {
-                val newData = withContext(Dispatchers.Default) { oldState.data + data }
+        val state = currentState
+        if (state.isRefreshing || state.isLoadingMore || !state.hasMore) return
+        _uiState.update { it.copy(isLoadingMore = true, error = null) }
+        loadJob = launchJobInVM {
+            requests.withLock {
+                val nextPage = currentState.currentPage + 1
+                val data = threadStoreRepo.load(page = nextPage)
                 _uiState.update {
-                    ThreadStoreUiState(currentPage = nextPage, data = newData, hasMore = data.hasMore)
+                    it.copy(
+                        isLoadingMore = false,
+                        currentPage = nextPage,
+                        data = (it.data + data).distinctBy(ThreadStore::id),
+                        hasMore = data.hasMore,
+                    )
                 }
             }
         }
     }
 
-    fun onDelete(thread: ThreadStore) {
-        viewModelScope.launch {
-            val oldThreads = currentState.data
-            val newThreads = withContext(Dispatchers.Default) {
-                oldThreads.fastFilter { it.id != thread.id }
+    fun onDelete(thread: ThreadStore) = launchInVM {
+        val result = requests.withLock {
+            if (currentState.data.none { it.id == thread.id }) return@launchInVM
+            threadStoreRepo.remove(thread).onSuccess {
+                applyThreadResult(thread.id, null)
             }
-            _uiState.update { it.copy(data = newThreads) }
-
-            threadStoreRepo.remove(thread)
-                .onFailure { e ->
-                    emitUiEvent(ThreadStoreUiEvent.Delete.Failure(e.getErrorMessage()))
-                    // Revert changes now
-                    _uiState.update { it.copy(data = oldThreads) }
-                }
-                .onSuccess { emitUiEvent(ThreadStoreUiEvent.Delete.Success) }
         }
+        result.fold(
+            onSuccess = { emitUiEvent(ThreadStoreUiEvent.Delete.Success) },
+            onFailure = { emitUiEvent(ThreadStoreUiEvent.Delete.Failure(it.getErrorMessage())) },
+        )
     }
 
     fun onThreadResult(threadId: Long, markedPostId: Long?) = launchInVM {
-        val newData = withContext(Dispatchers.Default) {
-            if (markedPostId != null) {
-                // Update
-                currentState.data.fastMap {
-                    when {
-                        // No changes, return null list
-                        it.id == threadId && it.markPid == markedPostId -> return@withContext null
-                        it.id == threadId -> it.copy(markPid = markedPostId)
-                        else -> it
-                    }
+        requests.withLock { applyThreadResult(threadId, markedPostId) }
+    }
+
+    private fun applyThreadResult(threadId: Long, markedPostId: Long?) {
+        _uiState.update { state ->
+            state.copy(data = state.data.mapNotNull { thread ->
+                if (thread.id == threadId) {
+                    markedPostId?.let { thread.copy(markPid = it) }
+                } else {
+                    thread
                 }
-            } else {
-                // Filter out
-                currentState.data.fastMapNotNull { if (it.id != threadId) it else null }
-            }
-        }
-        if (newData != null) {
-            _uiState.update { it.copy(data = newData) }
+            })
         }
     }
 

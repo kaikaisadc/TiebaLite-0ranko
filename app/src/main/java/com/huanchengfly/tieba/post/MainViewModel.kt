@@ -164,11 +164,9 @@ class MainViewModel @Inject constructor(
         if (!settingsRepository.uiSettings.snapshot().setupFinished) return
 
         val info = runCatching { UpdateManager.checkForUpdate() }.getOrNull() ?: return
-        val cachedFile = UpdateManager.updateApkFile(context, info)
-        val isDownloaded = cachedFile.exists() &&
-                (info.apkSize <= 0L || cachedFile.length() == info.apkSize)
+        val cachedFile = UpdateManager.findDownloadedApk(context, info)
         _autoUpdatePrompt.value = when {
-            isDownloaded -> AutoUpdatePrompt(info, cachedFile)
+            cachedFile != null -> AutoUpdatePrompt(info, cachedFile)
             settings.backgroundDownload -> {
                 UpdateDownloadWorker.enqueue(context, info)
                 null

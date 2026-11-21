@@ -81,8 +81,8 @@ suspend fun requestPinShortcut(
 ):Result<Unit> {
     if (ShortcutManagerCompat.isRequestPinShortcutSupported(context)) {
         val imageResult = runCatching {
-            CoilUtil.downloadCancelable(context, iconImageUri).inputStream().use {
-                BitmapFactory.decodeStream(it)?: throw IOException("Decode $iconImageUri failed!")
+            CoilUtil.withDownloadedImage(context, iconImageUri) { file ->
+                BitmapFactory.decodeFile(file.path) ?: throw IOException("Decode $iconImageUri failed!")
             }
         }
         if (imageResult.isSuccess) {

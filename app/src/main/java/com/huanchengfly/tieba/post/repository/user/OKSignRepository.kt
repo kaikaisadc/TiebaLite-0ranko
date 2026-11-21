@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.collection.LongSet
 import androidx.collection.mutableLongSetOf
 import androidx.work.WorkInfo
+import androidx.work.await
 import com.huanchengfly.tieba.post.api.models.ForumGuideBean
 import com.huanchengfly.tieba.post.api.models.MSignBean
 import com.huanchengfly.tieba.post.api.retrofit.exception.TiebaException
@@ -18,10 +19,10 @@ import com.huanchengfly.tieba.post.repository.source.network.OKSignNetworkDataSo
 import com.huanchengfly.tieba.post.repository.user.OKSignRepository.ProgressListener
 import com.huanchengfly.tieba.post.ui.models.settings.SignConfig
 import com.huanchengfly.tieba.post.utils.AccountUtil
-import com.huanchengfly.tieba.post.utils.DateTimeUtils
 import com.huanchengfly.tieba.post.utils.workManager
 import com.huanchengfly.tieba.post.workers.OKSignWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -30,12 +31,15 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.abs
 
 interface OKSignRepository {
 
@@ -44,6 +48,8 @@ interface OKSignRepository {
     suspend fun sign(listener: ProgressListener?)
 
     fun scheduleWorker()
+
+    suspend fun dispatchDailyRun(id: UUID): Boolean
 
     interface ProgressListener {
         fun onInit(total: Int, userName: String)
@@ -70,6 +76,7 @@ class OKSignRepositoryImp @Inject constructor(
 
     // Lazy init for instrumented test
     private val workManager by lazy { context.workManager() }
+    private val scheduleLock = Mutex()
 
     override val isOKSignWorkerRunning: SharedFlow<Boolean> by lazy {
         combine(
@@ -83,11 +90,13 @@ class OKSignRepositoryImp @Inject constructor(
         .shareInBackground()
     }
 
-    init { // Observe config changes then reschedule OKSignWorker
+    init {
         scope.launch {
-            settingsRepo.signConfig.collect {
-                scheduleWorkerInternal(signConfig = it)
-            }
+            // Older versions scheduled a one-time request under this name.
+            handleScheduleError { workManager.cancelUniqueWork(OKSignWorker.TAG).await() }
+            settingsRepo.signConfig
+                .distinctUntilChangedBy { it.autoSign to it.autoSignTime }
+                .collect { reconcileSchedule() }
         }
     }
 
@@ -250,31 +259,52 @@ class OKSignRepositoryImp @Inject constructor(
         signInternal(account, signConfig, listener)
     }
 
-    private suspend fun scheduleWorkerInternal(signConfig: SignConfig) {
-        if (!signConfig.autoSign) {
-            workManager.cancelAllWorkByTag(OKSignWorker.TAG)
-            return
-        }
-
-        val (hourOfDay, minute) = signConfig.autoSignTime
-        val info = OKSignWorker.observeOKSignWorkerInfo(workManager).first()
-        if (info?.state == WorkInfo.State.RUNNING) {
-            return
-        } else if (info == null || info.nextScheduleTimeMillis == Long.MAX_VALUE) {
-            OKSignWorker.startDelayed(workManager, hourOfDay, minute)
-        } else {
-            val targetTimeMill = System.currentTimeMillis() + DateTimeUtils.calculateNextDayDurationMills(hourOfDay, minute)
-            val workerTimeMill = info.nextScheduleTimeMillis
-            if (abs(targetTimeMill - workerTimeMill) > MAX_COMPOUNDING_ERROR_TIME) {
-                OKSignWorker.startDelayed(workManager, hourOfDay, minute)
+    private suspend fun reconcileSchedule() = handleScheduleError {
+        scheduleLock.withLock {
+            val config = settingsRepo.signConfig.snapshot()
+            val current = workManager.getWorkInfosForUniqueWorkFlow(OKSignWorker.DAILY_WORK_NAME)
+                .first()
+                .firstOrNull { !it.state.isFinished }
+            if (!config.autoSign) {
+                if (current != null) {
+                    workManager.cancelUniqueWork(OKSignWorker.DAILY_WORK_NAME).await()
+                    workManager.cancelUniqueWork(OKSignWorker.DAILY_RUN_NAME).await()
+                }
+            } else if (current == null || OKSignWorker.dailyTimeTag(config.autoSignTime) !in current.tags) {
+                OKSignWorker.scheduleDaily(workManager, config.autoSignTime)
             }
         }
     }
 
     override fun scheduleWorker() {
-        scope.launch {
-            val signConfig = settingsRepo.signConfig.snapshot()
-            scheduleWorkerInternal(signConfig)
+        scope.launch { reconcileSchedule() }
+    }
+
+    override suspend fun dispatchDailyRun(id: UUID): Boolean = scheduleLock.withLock {
+        val config = settingsRepo.signConfig.snapshot()
+        if (!config.autoSign) return@withLock true
+
+        val info = workManager.getWorkInfoByIdFlow(id).first()
+        if (info?.state != WorkInfo.State.RUNNING) return@withLock true
+        try {
+            OKSignWorker.enqueueDailyRun(workManager)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to start automatic sign-in", e)
+            return@withLock false
+        }
+        handleScheduleError { OKSignWorker.scheduleDaily(workManager, config.autoSignTime) }
+        true
+    }
+
+    private suspend fun handleScheduleError(schedule: suspend () -> Unit) {
+        try {
+            schedule()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to update automatic sign-in schedule", e)
         }
     }
 
@@ -290,8 +320,6 @@ class OKSignRepositoryImp @Inject constructor(
         }
 
         private const val TAG = "OKSignRepository"
-
-        private const val MAX_COMPOUNDING_ERROR_TIME = 10 * 60 * 1000 // 10 minutes
 
         private fun getSignDelay(slowMode: Boolean): Long {
             return if (slowMode) {

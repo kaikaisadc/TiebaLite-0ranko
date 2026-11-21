@@ -24,6 +24,7 @@ import com.huanchengfly.tieba.post.components.ConfigInitializer
 import com.huanchengfly.tieba.post.components.coil.TbImageLoaderFactory
 import com.huanchengfly.tieba.post.di.RepositoryEntryPoint
 import com.huanchengfly.tieba.post.repository.user.SettingsRepository
+import com.huanchengfly.tieba.post.utils.AppIconUtil
 import com.huanchengfly.tieba.post.utils.EmoticonManager
 import com.huanchengfly.tieba.post.workers.SettingsBackupWorker
 import com.huanchengfly.tieba.post.utils.ImageCacheUtil
@@ -34,7 +35,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChangedBy
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -106,16 +106,13 @@ class App : Application(), Configuration.Provider {
 
         AppBackgroundScope.launch {
             val uiSettings = settingRepository.uiSettings.snapshot()
+            AppIconUtil.applyLauncherIcon(uiSettings.appIcon, this@App)
             if (uiSettings.clearImageCacheOnLaunch) {
                 ImageCacheUtil.clearImageAllCache(
                     context = this@App,
                     keepFavoriteThreadImages = uiSettings.keepFavoriteThreadImages,
                 )
             }
-        }
-
-        AppBackgroundScope.launch {
-            delay(3000)
             ImageCacheUtil.clearGlideDiskCache(this@App)
         }
 

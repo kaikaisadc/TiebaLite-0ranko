@@ -44,13 +44,14 @@ import java.util.concurrent.TimeUnit
         Timestamp::class,
         UserProfile::class,
     ],
-    version = 6,
+    version = 7,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = Migrations.Migration_1_2::class),
         AutoMigration(from = 2, to = 3, spec = Migrations.Migration_2_3::class),
         AutoMigration(from = 3, to = 4, spec = Migrations.Migration_3_4::class),
         AutoMigration(from = 4, to = 5, spec = Migrations.Migration_4_5::class),
         AutoMigration(from = 5, to = 6, spec = Migrations.Migration_5_6::class),
+        AutoMigration(from = 6, to = 7),
     ]
 )
 abstract class TbLiteDatabase : RoomDatabase() {

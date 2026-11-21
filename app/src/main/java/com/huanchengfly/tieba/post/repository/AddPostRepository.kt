@@ -4,11 +4,9 @@ import com.huanchengfly.tieba.post.api.TiebaApi
 import com.huanchengfly.tieba.post.api.models.AddThreadBean
 import com.huanchengfly.tieba.post.api.models.protos.addPost.AddPostResponse
 import com.huanchengfly.tieba.post.arch.GlobalEvent
-import com.huanchengfly.tieba.post.arch.emitGlobalEvent
-import kotlinx.coroutines.GlobalScope
+import com.huanchengfly.tieba.post.arch.emitGlobalEventSuspend
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
 
 object AddPostRepository {
     fun addThread(
@@ -28,15 +26,13 @@ object AddPostRepository {
                 requireNotNull(isHide),
                 requireNotNull(isTitle)
             ).onEach {
-                GlobalScope.launch {
-                    emitGlobalEvent(
-                        GlobalEvent.AddThreadSuccess(
-                            checkNotNull(it.tid?.toLong()),
-                            checkNotNull(it.pid?.toLong()),
-                            checkNotNull(it.errorMsg),
-                        )
+                emitGlobalEventSuspend(
+                    GlobalEvent.AddThreadSuccess(
+                        it.tid?.toLongOrNull(),
+                        it.pid?.toLongOrNull(),
+                        it.errorMsg,
                     )
-                }
+                )
             }
 
     fun addPost(
@@ -63,21 +59,16 @@ object AddPostRepository {
                 replyUserId?.toString()
             )
             .onEach {
-                val newPostId = checkNotNull(it.data_?.pid?.toLongOrNull())
-                GlobalScope.launch {
-                    if (postId != null) {
-                        emitGlobalEvent(
-                            GlobalEvent.ReplySuccess(
-                                threadId,
-                                postId,
-                                postId,
-                                subPostId,
-                                newPostId
-                            )
-                        )
-                    } else {
-                        emitGlobalEvent(GlobalEvent.ReplySuccess(threadId, newPostId))
-                    }
-                }
+                val newPostId = it.data_?.pid?.toLongOrNull()
+                val anchor = postId ?: newPostId ?: return@onEach
+                emitGlobalEventSuspend(
+                    GlobalEvent.ReplySuccess(
+                        threadId = threadId,
+                        newPostId = anchor,
+                        postId = postId,
+                        subPostId = subPostId,
+                        newSubPostId = newPostId.takeIf { postId != null },
+                    )
+                )
             }
 }

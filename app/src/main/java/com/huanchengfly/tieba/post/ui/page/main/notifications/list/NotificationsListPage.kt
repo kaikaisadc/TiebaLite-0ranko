@@ -169,7 +169,9 @@ private fun NotificationsListContent(
                             onClick = {
                                 navigator.navigateDebounced(Destination.UserProfile(info.replyUser.id))
                             },
-                            desc = remember { DateTimeUtils.getRelativeTimeString(context, info.time) }
+                            desc = remember(info.time) {
+                                info.time?.let { DateTimeUtils.getRelativeTimeString(context, it) }
+                            }
                         )
 
                         if (info.content != null) {

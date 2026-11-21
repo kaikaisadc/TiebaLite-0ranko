@@ -30,8 +30,8 @@ sealed interface GlobalEvent : UiEvent {
     ) : GlobalEvent
 
     data class AddThreadSuccess(
-        val newThreadId: Long,
-        val newPostId: Long,
+        val newThreadId: Long?,
+        val newPostId: Long?,
         val msg: String?,
     ) : GlobalEvent
 }

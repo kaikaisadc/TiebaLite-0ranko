@@ -3,6 +3,7 @@ package com.huanchengfly.tieba.post.utils
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import com.huanchengfly.tieba.post.MainActivityV2
 import com.huanchengfly.tieba.post.components.ShortcutInitializer
 
 enum class LauncherIcons {
@@ -13,52 +14,47 @@ enum class LauncherIcons {
 
 object AppIconUtil {
 
-    private fun getComponentName(icon: LauncherIcons, context: Context): ComponentName {
-        val cls = when(icon) {
-           LauncherIcons.NEW_ICON -> "com.huanchengfly.tieba.post.MainActivityV2"
-           LauncherIcons.NEW_ICON_THEMED -> "com.huanchengfly.tieba.post.MainActivityIconThemed"
-           LauncherIcons.NEW_ICON_INVERT -> "com.huanchengfly.tieba.post.MainActivityIconInvert"
-           LauncherIcons.OLD_ICON -> "com.huanchengfly.tieba.post.MainActivityIconOld"
+    internal fun componentName(icon: LauncherIcons, context: Context): ComponentName {
+        val name = when (icon) {
+            LauncherIcons.NEW_ICON -> "MainActivityIconDefault"
+            LauncherIcons.NEW_ICON_THEMED -> "MainActivityIconThemed"
+            LauncherIcons.NEW_ICON_INVERT -> "MainActivityIconInvert"
+            LauncherIcons.OLD_ICON -> "MainActivityIconOld"
         }
-        return ComponentName(context, cls)
+        return ComponentName(context, "com.huanchengfly.tieba.post.$name")
     }
 
     fun setIcon(icon: LauncherIcons, ctx: Context) {
         val context = ctx.applicationContext
-        val packageManager = context.packageManager
-        packageManager.enableComponent(getComponentName(icon, context))
-        LauncherIcons.entries.forEach {
-            if (it != icon) {
-                packageManager.disableComponent(getComponentName(it, context))
+        if (applyLauncherIcon(icon, context)) ShortcutInitializer().create(context)
+    }
+
+    internal fun applyLauncherIcon(icon: LauncherIcons, context: Context): Boolean {
+        val manager = context.packageManager
+        val main = ComponentName(context, MainActivityV2::class.java)
+        val default = PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+        val enabled = PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        val disabled = PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        var changed = false
+
+        fun setState(component: ComponentName, state: Int, matches: (Int) -> Boolean) {
+            if (!matches(manager.getComponentEnabledSetting(component))) {
+                manager.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
+                changed = true
             }
         }
-        // 重新初始化快捷方式
-        ShortcutInitializer().create(context)
-    }
 
-    /**
-     * 启用组件
-     *
-     * @param componentName 组件名
-     */
-    private fun PackageManager.enableComponent(componentName: ComponentName) {
-        setComponentEnabledSetting(
-            componentName,
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-            PackageManager.DONT_KILL_APP
-        )
-    }
-
-    /**
-     * 禁用组件
-     *
-     * @param componentName 组件名
-     */
-    private fun PackageManager.disableComponent(componentName: ComponentName) {
-        setComponentEnabledSetting(
-            componentName,
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.DONT_KILL_APP
-        )
+        setState(main, default) { it == default || it == enabled }
+        setState(componentName(icon, context), enabled) {
+            it == enabled || (it == default && icon == LauncherIcons.NEW_ICON)
+        }
+        for (other in LauncherIcons.entries) {
+            if (other != icon) {
+                setState(componentName(other, context), disabled) {
+                    it == disabled || (it == default && other != LauncherIcons.NEW_ICON)
+                }
+            }
+        }
+        return changed
     }
 }

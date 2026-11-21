@@ -12,13 +12,15 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
-import androidx.work.WorkInfo
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.await
 import androidx.work.workDataOf
 import com.huanchengfly.tieba.post.R
 import com.huanchengfly.tieba.post.api.retrofit.exception.TiebaMSignException
@@ -28,13 +30,12 @@ import com.huanchengfly.tieba.post.api.retrofit.interceptors.ConnectivityInterce
 import com.huanchengfly.tieba.post.repository.user.OKSignRepository
 import com.huanchengfly.tieba.post.services.OKSignTileService
 import com.huanchengfly.tieba.post.utils.DateTimeUtils
+import com.huanchengfly.tieba.post.utils.HmTime
 import com.huanchengfly.tieba.post.utils.NotificationUtils
 import com.huanchengfly.tieba.post.utils.NotificationUtils.notificationManager
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
 
 @HiltWorker
@@ -44,15 +45,24 @@ class OKSignWorker @AssistedInject constructor(
     private val okSignRepository: OKSignRepository,
 ): CoroutineWorker(context, params) {
 
-    private var notificationUpdater = OKSignNotificationUpdater(
-        context = applicationContext,
-        cancelIntent = WorkManager.getInstance(applicationContext).createCancelPendingIntent(id),
-    ) { progress, total ->
-        OKSignTileService.requestListening(applicationContext)
-        setProgressAsync(workDataOf(KEY_PROGRESS to progress, KEY_TOTAL to total))
+    private val notificationUpdater by lazy {
+        OKSignNotificationUpdater(
+            context = applicationContext,
+            cancelIntent = WorkManager.getInstance(applicationContext).createCancelPendingIntent(id),
+        ) { progress, total ->
+            OKSignTileService.requestListening(applicationContext)
+            setProgressAsync(workDataOf(KEY_PROGRESS to progress, KEY_TOTAL to total))
+        }
     }
 
-    override suspend fun doWork(): Result = try {
+    override suspend fun doWork(): Result {
+        if (DAILY_WORK_NAME in tags) {
+            return if (okSignRepository.dispatchDailyRun(id)) Result.success() else Result.retry()
+        }
+        return sign()
+    }
+
+    private suspend fun sign(): Result = try {
         OKSignTileService.requestListening(applicationContext)
         notificationUpdater.setupNotification()
         try {
@@ -74,7 +84,6 @@ class OKSignWorker @AssistedInject constructor(
         )
     } finally {
         notificationManager.cancel(NOTIFICATION_ID)
-        okSignRepository.scheduleWorker()
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
@@ -93,6 +102,8 @@ class OKSignWorker @AssistedInject constructor(
     companion object {
         const val TAG = "OKSignWorker"
         const val TAG_EXPEDITED = "OKSignWorker:Expedited"
+        internal const val DAILY_WORK_NAME = "OKSignWorker:Daily"
+        internal const val DAILY_RUN_NAME = "OKSignWorker:DailyRun"
 
         const val KEY_PROGRESS = "sign_progress"
         const val KEY_TOTAL = "sign_total"
@@ -131,13 +142,25 @@ class OKSignWorker @AssistedInject constructor(
          * */
         private const val NOTIFICATION_ID_M_SIGN_FAILED = 16
 
-        fun startDelayed(workManager: WorkManager, hourOfDay: Int, minute: Int) {
-            val duration = DateTimeUtils.calculateNextDayDurationMills(hourOfDay, minute) / 1000
-            val request = OneTimeWorkRequestBuilder<OKSignWorker>()
+        internal fun dailyTimeTag(time: HmTime) = "$DAILY_WORK_NAME:${time.value}"
+
+        internal suspend fun scheduleDaily(workManager: WorkManager, time: HmTime) {
+            val request = PeriodicWorkRequestBuilder<OKSignWorker>(1, TimeUnit.DAYS)
                 .addTag(TAG)
-                .setInitialDelay(duration = duration.coerceAtLeast(60), TimeUnit.SECONDS)
+                .addTag(DAILY_WORK_NAME)
+                .addTag(dailyTimeTag(time))
+                .setNextScheduleTimeOverride(DateTimeUtils.nextDailyTimeMillis(time.hourOfDay, time.minute))
                 .build()
-            workManager.enqueueUniqueWork(TAG, ExistingWorkPolicy.REPLACE, request)
+            workManager.enqueueUniquePeriodicWork(
+                DAILY_WORK_NAME,
+                ExistingPeriodicWorkPolicy.UPDATE,
+                request,
+            ).await()
+        }
+
+        internal suspend fun enqueueDailyRun(workManager: WorkManager) {
+            val request = OneTimeWorkRequestBuilder<OKSignWorker>().addTag(TAG).build()
+            workManager.enqueueUniqueWork(DAILY_RUN_NAME, ExistingWorkPolicy.KEEP, request).await()
         }
 
         fun startExpedited(workManager: WorkManager) {
@@ -146,11 +169,6 @@ class OKSignWorker @AssistedInject constructor(
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
             workManager.enqueueUniqueWork(TAG_EXPEDITED, ExistingWorkPolicy.REPLACE, request)
-        }
-
-        fun observeOKSignWorkerInfo(workManager: WorkManager, expedited: Boolean = false): Flow<WorkInfo?> {
-            val tag = if(expedited) TAG_EXPEDITED else TAG
-            return workManager.getWorkInfosByTagFlow(tag).map { it.lastOrNull() }
         }
 
         private fun createNotificationChannel(context: Context) {

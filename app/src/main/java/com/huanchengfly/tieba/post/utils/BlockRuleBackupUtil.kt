@@ -267,73 +267,93 @@ object BlockRuleBackupUtil {
         input: InputStream,
         restoreOption: Int = 0,
     ): Unit = withContext(Dispatchers.IO) {
+        val rules = readRules(input, restoreOption)
+        transaction { rules.applyTo(dao, hiddenDao) }
+    }
+
+    internal fun readRules(input: InputStream, restoreOption: Int): Rules {
         var forums: List<String>? = null
         var keywords: List<KeywordCSV>? = null
         var users: List<UserCSV>? = null
         var hidden: List<HiddenThread>? = null
 
-        var zipIn: ZipInputStream? = null
-        var reader: BufferedReader? = null
-        try {
-            zipIn = ZipInputStream(input)
-            reader = zipIn.bufferedReader()
-            var entry: ZipEntry? = zipIn.nextEntry
-            while (entry != null) {
+        ZipInputStream(input).use { zip ->
+            val seen = mutableSetOf<String>()
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                if (!seen.add(entry.name)) throw IOException("Duplicate backup entry: ${entry.name}")
+                if (seen.size > 32) throw IOException("Too many block rule entries")
+                val entryInput = RuleEntryInput(zip)
+                val reader = entryInput.bufferedReader()
                 when (entry.name) {
-                    ENTRY_NAME_FORUM -> if (restoreOption and EXCLUDE_FORUM != EXCLUDE_FORUM) {
+                    ENTRY_NAME_FORUM -> if (restoreOption and EXCLUDE_FORUM == 0) {
                         forums = readForum(reader)
                     }
 
-                    ENTRY_NAME_KEYWORD -> if (restoreOption and EXCLUDE_KEYWORD != EXCLUDE_KEYWORD) {
+                    ENTRY_NAME_KEYWORD -> if (restoreOption and EXCLUDE_KEYWORD == 0) {
                         keywords = readKeyword(reader)
                     }
 
-                    ENTRY_NAME_USER -> if (restoreOption and EXCLUDE_USER != EXCLUDE_USER) {
+                    ENTRY_NAME_USER -> if (restoreOption and EXCLUDE_USER == 0) {
                         users = readUser(reader)
                     }
 
-                    ENTRY_NAME_HIDDEN -> if (restoreOption and EXCLUDE_HIDDEN != EXCLUDE_HIDDEN) {
+                    ENTRY_NAME_HIDDEN -> if (restoreOption and EXCLUDE_HIDDEN == 0) {
                         hidden = readHidden(reader)
                     }
                 }
-                zipIn.closeEntry()
-                entry = zipIn.nextEntry
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (entryInput.read(buffer) != -1) {
+                    // Skip unselected data through the same size limit.
+                }
+                zip.closeEntry()
             }
-        } finally {
-            reader?.closeQuietly()
-            zipIn?.closeQuietly()
-        }
-        // Empty backup or user excluded all data
-        if (forums.isNullOrEmpty() && keywords.isNullOrEmpty() && users.isNullOrEmpty() && hidden.isNullOrEmpty()) {
-            throw IllegalStateException("Empty restore list, abort!")
         }
 
-        // Restore transaction begin
-        transaction {
-            // Restore forum blacklist
+        if (forums.isNullOrEmpty() && keywords.isNullOrEmpty() && users.isNullOrEmpty() && hidden.isNullOrEmpty()) {
+            throw IOException("No block rules to restore")
+        }
+        return Rules(forums, keywords, users, hidden)
+    }
+
+    private class RuleEntryInput(private val zip: ZipInputStream) : InputStream() {
+        private var remaining = 16L * 1024 * 1024
+
+        override fun read(): Int = zip.read().also { if (it != -1) count(1) }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+            zip.read(buffer, offset, length).also { if (it > 0) count(it) }
+
+        private fun count(bytes: Int) {
+            remaining -= bytes
+            if (remaining < 0) throw IOException("Block rule entry is too large")
+        }
+    }
+
+    internal class Rules(
+        private val forums: List<String>?,
+        private val keywords: List<KeywordCSV>?,
+        private val users: List<UserCSV>?,
+        private val hidden: List<HiddenThread>?,
+    ) {
+        suspend fun applyTo(dao: BlockDao, hiddenDao: HiddenThreadDao) {
             if (!forums.isNullOrEmpty()) {
                 dao.deleteAllForum()
-                dao.insertForums(forums = forums.mapToEntity { name -> BlockForum(name) })
+                dao.insertForums(forums = forums.mapToEntity { BlockForum(it) })
             }
-
-            // Restore keyword block rules
             if (!keywords.isNullOrEmpty()) {
                 dao.deleteAllKeyword()
-                var id = 0L // PrimaryKey auto generation is off, manage id manually
+                var id = 0L
                 dao.insertKeywords(keywords = keywords.mapToEntity { (keyword, isRegex, whitelisted) ->
                     BlockKeyword(id++, keyword, isRegex, whitelisted)
                 })
             }
-
-            // Restore user block rules
             if (!users.isNullOrEmpty()) {
                 dao.deleteAllUser()
                 dao.insertUsers(blockUsers = users.mapToEntity { (uid, name, whitelisted) ->
                     BlockUser(uid, name, whitelisted)
                 })
             }
-
-            // Restore hidden threads
             if (!hidden.isNullOrEmpty()) {
                 hiddenDao.deleteAllHidden()
                 hiddenDao.insertHidden(*hidden.toTypedArray())

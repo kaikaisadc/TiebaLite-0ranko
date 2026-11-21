@@ -76,13 +76,13 @@ open class TbWebViewClient(
         val BDUSS = cookies["BDUSS"]
         val currentAccountBDUSS = AccountUtil.getBduss()
         if (currentAccountBDUSS != null && BDUSS != currentAccountBDUSS) {
-            cookieManager.setCookie(url, AccountUtil.getBdussCookie(currentAccountBDUSS))
+            cookieManager.setCookie(url, "${AccountUtil.getBdussCookie(currentAccountBDUSS)}; Secure")
         }
     }
 
     override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
-        if (url?.toUri()?.isBaidu() == true) {
+        if (url != null && url.toUri().let { it.scheme == "https" && it.isBaidu() }) {
             injectCookies(url = url)
         }
     }

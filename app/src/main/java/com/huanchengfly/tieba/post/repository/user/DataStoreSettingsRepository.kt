@@ -134,7 +134,9 @@ class DataStoreSettingsRepository @Inject constructor(
 
     override val blockSettings: Settings<BlockSettings> = ComplexSettings(BlockTransformer)
 
-    override val fontScale: Settings<Float> = SimpleSettings(floatPreferencesKey("fontScale"), 1.0f)
+    private val fontScaleKey = floatPreferencesKey("fontScale")
+
+    override val fontScale: Settings<Float> = SimpleSettings(fontScaleKey, 1.0f)
 
     override val habitSettings: Settings<HabitSettings> = ComplexSettings(HabitSettingsTransformer)
 
@@ -153,6 +155,66 @@ class DataStoreSettingsRepository @Inject constructor(
     override val UUIDSettings: Settings<String> = SimpleSettings(stringPreferencesKey("uuid"), "")
 
     override val myLittleTail: Settings<String> = SimpleSettings(stringPreferencesKey("little_tail"), "")
+
+    internal data class BackupSettingsValues(
+        val block: BlockSettings?,
+        val fontScale: Float?,
+        val habit: HabitSettings?,
+        val privacy: PrivacySettings?,
+        val theme: ThemeSettings?,
+        val ui: UISettings?,
+        val update: ((UpdateSettings) -> UpdateSettings)?,
+        val sign: SignConfig?,
+    )
+
+    internal suspend fun restoreSettings(
+        values: BackupSettingsValues,
+        commit: suspend (suspend () -> Unit) -> Unit,
+    ) {
+        var before: Preferences? = null
+        var after: Preferences? = null
+        try {
+            commit {
+                after = dataStore.edit { prefs ->
+                    before = prefs.toPreferences()
+                    values.block?.let { BlockTransformer.set(prefs, it) }
+                    values.fontScale?.let { prefs[fontScaleKey] = it }
+                    values.habit?.let { HabitSettingsTransformer.set(prefs, it) }
+                    values.privacy?.let { PrivacySettingsTransformer.set(prefs, it) }
+                    values.theme?.let { ThemeSettingsTransformer.set(prefs, it) }
+                    values.ui?.let {
+                        val current = UISettingsTransformer.get(prefs)
+                        UISettingsTransformer.set(prefs, it.copy(setupFinished = current.setupFinished))
+                    }
+                    values.update?.let { UpdateSettingsTransformer.set(prefs, it(UpdateSettingsTransformer.get(prefs))) }
+                    values.sign?.let { SignConfigTransformer.set(prefs, it) }
+                }
+            }
+        } catch (failure: Exception) {
+            val original = before
+            val installed = after
+            if (original != null && installed != null && original != installed) {
+                try {
+                    dataStore.edit { prefs ->
+                        // Restore keys from this edit while preserving intervening changes.
+                        for (key in original.asMap().keys + installed.asMap().keys) {
+                            @Suppress("UNCHECKED_CAST")
+                            val typedKey = key as Preferences.Key<Any>
+                            val previous = original[typedKey]
+                            val restored = installed[typedKey]
+                            if (previous != restored && prefs[typedKey] == restored) {
+                                if (previous == null) prefs.remove(typedKey) else prefs[typedKey] = previous
+                            }
+                        }
+                    }
+                } catch (rollbackFailure: Exception) {
+                    failure.addSuppressed(rollbackFailure)
+                }
+            }
+            throw failure
+        }
+    }
+
 }
 
 private object UpdateSettingsTransformer : PreferenceTransformer<UpdateSettings> {

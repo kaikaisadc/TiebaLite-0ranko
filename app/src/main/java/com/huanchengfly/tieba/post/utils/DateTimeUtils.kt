@@ -97,17 +97,17 @@ object DateTimeUtils {
         return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(timeInMillis))
     }
 
-    fun calculateNextDayDurationMills(hourOfDay: Int, minute: Int): Long {
+    fun nextDailyTimeMillis(hourOfDay: Int, minute: Int): Long {
         val target = Calendar.getInstance()
+        val now = target.timeInMillis
         target[Calendar.HOUR_OF_DAY] = hourOfDay
         target[Calendar.MINUTE] = minute
+        target[Calendar.SECOND] = 0
         target[Calendar.MILLISECOND] = 0
-
-        val now = Calendar.getInstance()
-        if (target.before(now)) {
-            target.add(Calendar.HOUR_OF_DAY, 24)
+        if (target.timeInMillis <= now) {
+            target.add(Calendar.DAY_OF_YEAR, 1)
         }
-        return target.timeInMillis - now.timeInMillis
+        return target.timeInMillis
     }
 
     fun fixTimestamp(timestamp: Long): Long {

@@ -10,6 +10,8 @@ import com.huanchengfly.tieba.post.ui.models.Author
 import com.huanchengfly.tieba.post.ui.models.ThreadStore
 import com.huanchengfly.tieba.post.utils.AccountUtil
 import com.huanchengfly.tieba.post.utils.StringUtil
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -40,8 +42,9 @@ class ThreadStoreRepository @Inject constructor(
         val showBothName = settingsRepository.habitSettings.snapshot().showBothName
         val result = data.mapUiModel(showBothName)
         // Sync the local favorites snapshot for offline image cache preservation
-        runCatching {
-            favoriteThreadDao.upsertAll(result.map { FavoriteThread(it.id, System.currentTimeMillis()) })
+        syncLocalFavorites {
+            val now = System.currentTimeMillis()
+            favoriteThreadDao.upsertAll(result.map { FavoriteThread(it.id, now) })
         }
         return result
     }
@@ -55,16 +58,25 @@ class ThreadStoreRepository @Inject constructor(
      * 取消收藏这个帖子
      * */
     suspend fun remove(thread: ThreadStore) = runCatching {
-        networkDataSource.remove(threadId = thread.id, tbs = requireTBS())
-        favoriteThreadDao.deleteById(thread.id)
-    }
+        remove(thread.id, forumId = null, tbs = null)
+    }.onFailure { if (it is CancellationException) throw it }
 
     /**
      * 取消收藏这个帖子
      * */
     suspend fun remove(threadId: Long, forumId: Long?, tbs: String?) {
         networkDataSource.remove(threadId, forumId, tbs = tbs ?: requireTBS())
-        favoriteThreadDao.deleteById(threadId)
+        syncLocalFavorites { favoriteThreadDao.deleteById(threadId) }
+    }
+
+    private suspend fun syncLocalFavorites(update: suspend () -> Unit) {
+        try {
+            update()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("ThreadStoreRepository", "Unable to update local favorites", e)
+        }
     }
 
     companion object {

@@ -3,6 +3,7 @@ package com.huanchengfly.tieba.post.models.database.dao
 import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import com.huanchengfly.tieba.post.models.database.UserProfile
 import kotlinx.coroutines.flow.Flow
@@ -15,6 +16,15 @@ interface UserProfileDao {
 
     @Upsert
     suspend fun upsert(profile: UserProfile)
+
+    @Transaction
+    suspend fun saveProfile(profile: UserProfile, recordHistory: Boolean) {
+        val lastVisit = if (recordHistory) System.currentTimeMillis() else getLastVisit(profile.uid) ?: 0
+        upsert(profile.copy(lastVisit = lastVisit))
+    }
+
+    @Query("SELECT last_visit FROM user WHERE uid = :uid")
+    suspend fun getLastVisit(uid: Long): Long?
 
     @Query("DELETE FROM user")
     suspend fun deleteAll()
@@ -51,13 +61,13 @@ interface UserProfileDao {
     /**
      * Get user profile paging source.
      * */
-    @Query("SELECT * FROM user ORDER BY last_visit DESC")
+    @Query("SELECT * FROM user WHERE last_visit > 0 ORDER BY last_visit DESC, uid DESC")
     fun pagingSourceSorted(): PagingSource<Int, UserProfile>
 
     /**
      * Select all user profile from the user table.
      */
-    @Query("SELECT * FROM user ORDER BY last_visit DESC")
+    @Query("SELECT * FROM user WHERE last_visit > 0 ORDER BY last_visit DESC, uid DESC")
     suspend fun getAllSorted(): List<UserProfile>
 
     /**

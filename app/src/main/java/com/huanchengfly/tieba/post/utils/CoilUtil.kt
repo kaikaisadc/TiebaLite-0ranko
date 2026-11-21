@@ -9,14 +9,17 @@ import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.unit.IntSize
 import coil3.decode.BlackholeDecoder
 import coil3.decode.Decoder
+import coil3.ImageLoader
 import coil3.imageLoader
 import coil3.request.CachePolicy
+import coil3.request.ErrorResult
 import coil3.request.ImageRequest
+import coil3.request.SuccessResult
 import com.huanchengfly.tieba.post.arch.unsafeLazy
-import okhttp3.internal.closeQuietly
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
-import java.io.InputStream
 
 object CoilUtil {
 
@@ -34,24 +37,25 @@ object CoilUtil {
         decoderFactory(BlackholeDecoderFactory).memoryCachePolicy(CachePolicy.DISABLED)
     }
 
-    /**
-     * Download image or return cached file directly from Coil disk cache.
-     * */
-    suspend fun downloadCancelable(context: Context, url: String): File {
-        val imageLoader = context.applicationContext.imageLoader
-        val diskCache = imageLoader.diskCache ?: throw IllegalStateException("Disk cache disabled")
-        var snapshot = diskCache.openSnapshot(url)
-        // Cache miss, download from network
-        if (snapshot == null) {
+    suspend fun <T> withDownloadedImage(
+        context: Context,
+        url: String,
+        imageLoader: ImageLoader = context.applicationContext.imageLoader,
+        consume: suspend (File) -> T,
+    ): T = withContext(Dispatchers.IO) {
+        val diskCache = imageLoader.diskCache ?: throw IOException("Image disk cache is disabled")
+        val snapshot = diskCache.openSnapshot(url) ?: run {
             val request = ImageRequest.Builder(context.applicationContext)
                 .data(url)
                 .downloadOnly()
                 .build()
-            imageLoader.execute(request)
-            snapshot = diskCache.openSnapshot(url)!!
+            when (val result = imageLoader.execute(request)) {
+                is ErrorResult -> throw IOException("Unable to download image", result.throwable)
+                is SuccessResult -> diskCache.openSnapshot(result.diskCacheKey ?: url)
+                    ?: throw IOException("Downloaded image is unavailable in the cache")
+            }
         }
-
-        return snapshot.data.toFile()
+        snapshot.use { consume(it.data.toFile()) }
     }
 
     /**
@@ -63,10 +67,9 @@ object CoilUtil {
             inJustDecodeBounds = true
         }
 
-        var ins: InputStream? = null
         try {
-            ins = context.contentResolver.openInputStream(resource) ?: throw IOException("Unable to open $resource")
-            BitmapFactory.decodeStream(ins, null, options)
+            val input = context.contentResolver.openInputStream(resource) ?: throw IOException("Unable to open $resource")
+            input.use { BitmapFactory.decodeStream(it, null, options) }
 
             if (options.outWidth == -1 || options.outHeight == -1) {
                 throw IOException("Failed to decode dimensions of $resource")
@@ -76,8 +79,6 @@ object CoilUtil {
             )
         } catch (e: Exception) {
             return Result.failure(e)
-        } finally {
-            ins?.closeQuietly()
         }
     }
 }

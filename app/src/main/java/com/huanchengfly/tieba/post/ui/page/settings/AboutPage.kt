@@ -274,8 +274,8 @@ fun AboutPage(
                 if (info == null) {
                     UpdateUiState.UpToDate
                 } else {
-                    val file = UpdateManager.updateApkFile(context, info)
-                    if (file.exists() && (info.apkSize <= 0L || file.length() == info.apkSize)) {
+                    val file = UpdateManager.findDownloadedApk(context, info)
+                    if (file != null) {
                         UpdateUiState.Downloaded(info, file)
                     } else {
                         UpdateUiState.Available(info)

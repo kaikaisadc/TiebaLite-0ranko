@@ -2,6 +2,7 @@ package com.huanchengfly.tieba.post.models.database.dao
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Update
 import androidx.room.Upsert
 import com.huanchengfly.tieba.post.models.database.Account
 import kotlinx.coroutines.flow.Flow
@@ -19,6 +20,9 @@ interface AccountDao {
      */
     @Upsert
     suspend fun upsert(account: Account)
+
+    @Update
+    suspend fun update(account: Account)
 
     @Query("DELETE FROM account")
     suspend fun deleteAll()

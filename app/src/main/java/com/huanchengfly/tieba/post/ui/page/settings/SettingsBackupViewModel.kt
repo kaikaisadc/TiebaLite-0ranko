@@ -12,7 +12,7 @@ import com.huanchengfly.tieba.post.models.database.dao.BlockDao
 import com.huanchengfly.tieba.post.models.database.dao.HiddenThreadDao
 import com.huanchengfly.tieba.post.models.database.dao.TransactionRunner
 import com.huanchengfly.tieba.post.repository.user.OKSignRepository
-import com.huanchengfly.tieba.post.repository.user.SettingsRepository
+import com.huanchengfly.tieba.post.repository.user.DataStoreSettingsRepository
 import com.huanchengfly.tieba.post.workers.SettingsBackupWorker
 import com.huanchengfly.tieba.post.ui.models.settings.BackupHistoryItem
 import com.huanchengfly.tieba.post.ui.models.settings.BackupSettings
@@ -53,7 +53,7 @@ private const val TAG = "SettingsBackupViewModel"
 @HiltViewModel
 class SettingsBackupViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val settingsRepository: SettingsRepository,
+    private val settingsRepository: DataStoreSettingsRepository,
     private val blockDao: BlockDao,
     private val hiddenDao: HiddenThreadDao,
     private val transactionRunner: TransactionRunner,
@@ -145,7 +145,9 @@ class SettingsBackupViewModel @Inject constructor(
 
             runCatching {
                 val (_, uri) = pending
-                context.contentResolver.openInputStream(uri)!!.use { input ->
+                val input = context.contentResolver.openInputStream(uri)
+                    ?: throw java.io.IOException("Unable to open settings backup")
+                input.use {
                     SettingsBackupUtil.restore(
                         context = context,
                         settingsRepository = settingsRepository,

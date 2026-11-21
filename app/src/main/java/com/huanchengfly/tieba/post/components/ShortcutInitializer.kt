@@ -1,5 +1,6 @@
 package com.huanchengfly.tieba.post.components
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ShortcutInfo
@@ -17,6 +18,7 @@ import com.huanchengfly.tieba.post.R
 import com.huanchengfly.tieba.post.di.CoroutinesEntryPoint
 import com.huanchengfly.tieba.post.di.RepositoryEntryPoint
 import com.huanchengfly.tieba.post.ui.page.TB_LITE_DOMAIN
+import com.huanchengfly.tieba.post.utils.AppIconUtil
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -38,7 +40,7 @@ class ShortcutInitializer : Initializer<Unit>{
             val repoEntryPoint = EntryPointAccessors.fromApplication<RepositoryEntryPoint>(context)
             val settingsRepo = repoEntryPoint.settingsRepository()
             val loggedIn = settingsRepo.accountUid.snapshot() > 0
-            initialize(loggedIn, context)
+            initialize(loggedIn, context, AppIconUtil.componentName(settingsRepo.uiSettings.snapshot().appIcon, context))
         }
     }
 
@@ -130,18 +132,19 @@ class ShortcutInitializer : Initializer<Unit>{
             }
         }
 
-        private fun buildShortcut(context: Context, shortcut: TbShortcut): ShortcutInfoCompat.Builder {
+        private fun buildShortcut(context: Context, shortcut: TbShortcut, launcher: ComponentName?): ShortcutInfoCompat.Builder {
             val shortLabel = context.getString(shortcut.label)
             return ShortcutInfoCompat.Builder(context, shortcut.id)
                 .setShortLabel(shortLabel)
                 .setLongLabel(shortLabel)
                 .setIntent(createIntent(context, shortcut))
                 .setIcon(IconCompat.createWithResource(context, shortcut.icon))
+                .apply { if (launcher != null) setActivity(launcher) }
         }
 
         @RequiresApi(Build.VERSION_CODES.N_MR1)
-        private fun isShortcutsOutdated(context: Context, dynamicShortcuts: List<ShortcutInfo>, loggedIn: Boolean): Boolean {
-            if (dynamicShortcuts.isEmpty()) return true
+        private fun isShortcutsOutdated(context: Context, dynamicShortcuts: List<ShortcutInfo>, loggedIn: Boolean, launcher: ComponentName?): Boolean {
+            if (dynamicShortcuts.isEmpty() || (launcher != null && dynamicShortcuts.any { it.activity != launcher })) return true
 
             // Map to <ID, Intent filterHash>
             val available = TbShortcut.entries
@@ -161,15 +164,15 @@ class ShortcutInitializer : Initializer<Unit>{
         }
 
         @RequiresApi(Build.VERSION_CODES.N_MR1)
-        fun initialize(loggedIn: Boolean, context: Context) {
+        fun initialize(loggedIn: Boolean, context: Context, launcher: ComponentName? = null) {
             val shortcutManager = context.getSystemService(ShortcutManager::class.java)
             val dynamicShortcuts = shortcutManager.dynamicShortcuts
 
-            if (isShortcutsOutdated(context, dynamicShortcuts, loggedIn)) {
+            if (isShortcutsOutdated(context, dynamicShortcuts, loggedIn, launcher)) {
                 val tbShortcuts = TbShortcut.entries
                     .filter { it.shouldEnable(loggedIn) }
                     .map {
-                        buildShortcut(context, shortcut = it).build()
+                        buildShortcut(context, it, launcher).build()
                     }
                 val size = tbShortcuts.size
                 Log.w(TAG, "onInitialize: Enabling $size dynamic shortcuts, logged-in: $loggedIn")

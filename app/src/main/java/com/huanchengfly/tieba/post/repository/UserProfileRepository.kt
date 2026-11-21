@@ -114,7 +114,7 @@ class UserProfileRepository @Inject constructor(
             if (forceRefresh || checkUserCacheExpired(uid)) {
                 val (data: User, anti: Anti?) = networkDataSource.loadUserProfile(uid)
                 val blockDays = anti?.days_tofree?.takeIf { anti.block_stat == 1 } ?: 0
-                userProfileDao.upsert(profile = mapToEntity(data, blockDays))
+                userProfileDao.saveProfile(mapToEntity(data, blockDays), recordHistory)
                 localDataSource.purgeByUid(uid)
             } else if (recordHistory) {
                 userProfileDao.updateLastVisit(uid, timestamp = System.currentTimeMillis())

@@ -5,7 +5,6 @@ import com.huanchengfly.tieba.post.R
 import com.huanchengfly.tieba.post.api.TiebaApi
 import com.huanchengfly.tieba.post.api.models.MessageListBean
 import com.huanchengfly.tieba.post.api.models.MessageListBean.MessageInfoBean
-import com.huanchengfly.tieba.post.api.retrofit.exception.TiebaException
 import com.huanchengfly.tieba.post.api.retrofit.exception.TiebaNotLoggedInException
 import com.huanchengfly.tieba.post.api.retrofit.exception.getErrorMessage
 import com.huanchengfly.tieba.post.arch.BaseViewModel
@@ -217,16 +216,18 @@ private suspend fun List<MessageInfoBean>.mapUiModel(
 ): List<MessageItemData> {
     return withContext(Dispatchers.Default) {
         val isReply = type == NotificationsType.ReplyMe
-        map {
+        mapNotNull {
+            val threadId = it.threadId?.toLongOrNull() ?: return@mapNotNull null
+            val postId = it.postId?.toLongOrNull() ?: return@mapNotNull null
             val isFloor = it.isFloor == "1"
-            val replyUser = it.replyer!!.run {
+            val replyUser = it.replyer?.run {
                 ReplyUser(
-                    id = id?.toLongOrNull() ?: throw TiebaException("Invalid reply user ID: $id"),
+                    id = id?.toLongOrNull() ?: return@mapNotNull null,
                     nameShow = nameShow ?: name ?: "",
                     avatarUrl = if (portrait.isNullOrEmpty()) null else StringUtil.getAvatarUrl(portrait),
                     isFans = isFans == "1"
                 )
-            }
+            } ?: return@mapNotNull null
 
             // Note: conditions from NotificationsListPage, do not touch
             val title = when {
@@ -249,17 +250,17 @@ private suspend fun List<MessageInfoBean>.mapUiModel(
 
             MessageItemData(
                 replyUser = replyUser,
-                threadId = it.threadId?.toLongOrNull() ?: throw TiebaException("Invalid thread ID ${it.threadId}."),
-                postId = it.postId?.toLongOrNull() ?: throw TiebaException("Invalid post ID ${it.postId}."),
+                threadId = threadId,
+                postId = postId,
                 isBlocked = isBlocked(replyUser.id, it.content.orEmpty()),
                 isFloor = isFloor,
                 title = title?.emoticonString,
                 content = it.content?.emoticonString,
-                time = DateTimeUtils.fixTimestamp(it.time!!.toLong()),
+                time = it.time?.toLongOrNull()?.let(DateTimeUtils::fixTimestamp),
                 quoteContent = quoteContent,
                 quoteUser = it.quoteUser?.run {
                     Author(
-                        id = id?.toLongOrNull() ?: throw TiebaException("Invalid quote user ID: $id"),
+                        id = id?.toLongOrNull() ?: return@run null,
                         name = nameShow ?: name ?: "",
                         avatarUrl = StringUtil.getAvatarUrl(portrait)
                     )
@@ -269,7 +270,7 @@ private suspend fun List<MessageInfoBean>.mapUiModel(
                 threadType = it.threadType,
                 unread = it.unread
             )
-        }
+        }.distinctBy(MessageItemData::lazyListItemKey)
     }
 }
 

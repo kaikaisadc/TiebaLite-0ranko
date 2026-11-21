@@ -4,7 +4,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.text.AnnotatedString
 import com.huanchengfly.tieba.post.api.models.MessageListBean.MessageInfoBean
 import com.huanchengfly.tieba.post.ui.models.Author
-import java.util.Objects
 
 /**
  * UI Model of [MessageInfoBean]
@@ -18,7 +17,7 @@ import java.util.Objects
     val isFloor: Boolean,
     val title: AnnotatedString? = null,
     val content: AnnotatedString? = null,
-    val time: Long,
+    val time: Long?,
     val quoteContent: AnnotatedString? = null,
     val quoteUser: Author? = null,
     val quotePid: Long? = null,
@@ -27,6 +26,6 @@ import java.util.Objects
     val unread: String? = null
 ) {
 
-    val lazyListItemKey: Int
-        get() = Objects.hash(postId, replyUser.id, time, quotePid)
+    val lazyListItemKey: String
+        get() = "$threadId:$postId:${replyUser.id}:$time:$quotePid"
 }

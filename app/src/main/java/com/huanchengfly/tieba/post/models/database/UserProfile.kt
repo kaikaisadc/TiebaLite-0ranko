@@ -10,7 +10,7 @@ import androidx.room.PrimaryKey
  * */
 @Entity(
     tableName = "user",
-    indices = [Index("last_visit", unique = true)]
+    indices = [Index("last_visit")]
 )
 data class UserProfile(
     @PrimaryKey
@@ -37,7 +37,7 @@ data class UserProfile(
     @ColumnInfo(name = "last_update")
     val lastUpdate: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "last_visit")
-    val lastVisit: Long = System.currentTimeMillis(),
+    val lastVisit: Long = 0,
     @ColumnInfo(name = "days_tofree", defaultValue = "0")
     val blockDays: Int = 0,
 )

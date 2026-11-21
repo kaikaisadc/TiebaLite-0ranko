@@ -103,12 +103,6 @@
             android:theme="@style/Theme.Splash"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -139,6 +133,20 @@
         </activity>
 
         <activity-alias
+            android:name=".MainActivityIconDefault"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_new"
+            android:roundIcon="@mipmap/ic_launcher_new_round"
+            android:targetActivity=".MainActivityV2">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
             android:name=".MainActivityIconThemed"
             android:enabled="false"
             android:exported="true"
@@ -149,24 +157,6 @@
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="tblite" />
-            </intent-filter>
-
-            <intent-filter android:autoVerify="true">
-                <data
-                    android:host="unidispatch"
-                    android:scheme="com.baidu.tieba" />
-
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
             </intent-filter>
         </activity-alias>
 
@@ -182,24 +172,6 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="tblite" />
-            </intent-filter>
-
-            <intent-filter android:autoVerify="true">
-                <data
-                    android:host="unidispatch"
-                    android:scheme="com.baidu.tieba" />
-
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-            </intent-filter>
         </activity-alias>
 
         <activity-alias
@@ -213,24 +185,6 @@
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="tblite" />
-            </intent-filter>
-
-            <intent-filter android:autoVerify="true">
-                <data
-                    android:host="unidispatch"
-                    android:scheme="com.baidu.tieba" />
-
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
             </intent-filter>
         </activity-alias>
 

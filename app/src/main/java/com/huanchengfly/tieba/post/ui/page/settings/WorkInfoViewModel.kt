@@ -25,7 +25,7 @@ class WorkInfoViewModel @Inject constructor(@ApplicationContext context: Context
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
-    val oKSignPeriodic: StateFlow<String> = workManager.getWorkInfosByTagFlow(OKSignWorker.TAG)
+    val oKSignPeriodic: StateFlow<String> = workManager.getWorkInfosForUniqueWorkFlow(OKSignWorker.DAILY_WORK_NAME)
         .map(transform = ::format)
         .stateInViewModel(initialValue = WORKER_NOT_ENQUEUE)
 
@@ -46,7 +46,7 @@ class WorkInfoViewModel @Inject constructor(@ApplicationContext context: Context
 
         return withContext(Dispatchers.Default) {
             val stringBuilder = StringBuilder()
-            workInfos[0].run {
+            (workInfos.firstOrNull { !it.state.isFinished } ?: workInfos.first()).run {
                 stringBuilder.appendLine("ID: $id")
                 stringBuilder.appendLine("Tags: {")
                 for (tag in tags) {

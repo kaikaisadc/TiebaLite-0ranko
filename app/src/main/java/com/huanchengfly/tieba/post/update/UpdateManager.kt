@@ -7,12 +7,15 @@ import android.net.Uri
 import android.os.Environment
 import androidx.core.content.FileProvider
 import com.huanchengfly.tieba.post.BuildConfig
+import com.huanchengfly.tieba.post.R
 import com.huanchengfly.tieba.post.utils.DownloadUtil
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -20,7 +23,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipFile
 
 object UpdateManager {
 
@@ -28,6 +33,9 @@ object UpdateManager {
     private const val GITHUB_LATEST_RELEASE_URL =
         "https://api.github.com/repos/$REPO/releases/latest"
     internal const val APK_MIME_TYPE = "application/vnd.android.package-archive"
+
+    private val downloadLock = Mutex()
+    private val invalidFilenameChars = Regex("[^a-zA-Z0-9._-]")
 
     private val httpClient by lazy {
         OkHttpClient.Builder()
@@ -95,38 +103,44 @@ object UpdateManager {
         }
     }
 
-    /**
-     * 使用系统 DownloadManager 下载 APK 到应用专属目录并跟踪进度。
-     * 协程被取消时会移除未完成的下载任务。
-     */
     suspend fun downloadAndTrack(
         context: Context,
         info: UpdateInfo,
-        onProgress: (Float) -> Unit,
+        onProgress: ((Float) -> Unit)? = null,
     ): DownloadResult = withContext(Dispatchers.IO) {
-        val targetFile = updateApkFile(context, info)
-        targetFile.parentFile?.mkdirs()
-        targetFile.delete()
+        downloadLock.withLock {
+            val target = updateApkFile(context, info)
+                ?: return@withLock DownloadResult.Failure("下载目录不可用")
+            if (isCompleteApk(target, info.apkSize)) return@withLock DownloadResult.Success(target)
 
-        val downloadId = try {
-            DownloadUtil.enqueueNewDownloadOrThrow(
-                uri = Uri.parse(info.apkUrl),
-                title = "TiebaLite ${info.versionName}",
-                destination = Uri.fromFile(targetFile),
-            ) {
-                setMimeType(APK_MIME_TYPE)
-                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-                setAllowedOverMetered(true)
-            }
-        } catch (e: Exception) {
-            return@withContext DownloadResult.Failure(e.message ?: "无法开始下载")
-        }
-
-        return@withContext try {
-            trackDownload(downloadId, targetFile, info.apkSize, onProgress)
-        } finally {
-            if (!coroutineContext.isActive) {
-                DownloadUtil.downloadManager.remove(downloadId)
+            val staging = File(target.parentFile, "${target.name}.${UUID.randomUUID()}.part")
+            var downloadId: Long? = null
+            try {
+                staging.parentFile?.mkdirs()
+                val id = DownloadUtil.enqueueNewDownloadOrThrow(
+                    uri = Uri.parse(info.apkUrl),
+                    title = context.getString(R.string.update_download_title, info.versionName),
+                    destination = Uri.fromFile(staging),
+                ) {
+                    setMimeType(APK_MIME_TYPE)
+                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
+                    setAllowedOverMetered(true)
+                }
+                downloadId = id
+                val result = trackDownload(id, staging, info.apkSize, onProgress)
+                currentCoroutineContext().ensureActive()
+                when {
+                    result is DownloadResult.Failure -> result
+                    staging.renameTo(target) -> DownloadResult.Success(target)
+                    else -> DownloadResult.Failure("无法保存更新文件")
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                DownloadResult.Failure(e.message ?: "无法下载更新")
+            } finally {
+                downloadId?.let { runCatching { DownloadUtil.downloadManager.remove(it) } }
+                staging.delete()
             }
         }
     }
@@ -135,7 +149,7 @@ object UpdateManager {
         downloadId: Long,
         targetFile: File,
         expectedSize: Long,
-        onProgress: (Float) -> Unit,
+        onProgress: ((Float) -> Unit)?,
     ): DownloadResult {
         while (true) {
             currentCoroutineContext().ensureActive()
@@ -144,7 +158,7 @@ object UpdateManager {
             when (progress.status) {
                 DownloadManager.STATUS_SUCCESSFUL -> {
                     // 校验下载文件完整性，避免损坏的 APK 导致安装时解析失败
-                    if (expectedSize > 0L && targetFile.length() != expectedSize) {
+                    if (!isCompleteApk(targetFile, expectedSize)) {
                         return DownloadResult.Failure("下载文件校验失败，请重试")
                     }
                     return DownloadResult.Success(targetFile)
@@ -154,7 +168,7 @@ object UpdateManager {
                     return DownloadResult.Failure("下载失败（错误码 ${progress.reason}）")
 
                 else -> {
-                    if (progress.total > 0) {
+                    if (onProgress != null && progress.total > 0) {
                         val fraction =
                             (progress.downloaded.toFloat() / progress.total).coerceIn(0f, 1f)
                         withContext(Dispatchers.Main.immediate) { onProgress(fraction) }
@@ -184,12 +198,25 @@ object UpdateManager {
         }
     }
 
-    /** 更新包落盘位置, 前台下载与后台下载共用同一路径 */
-    fun updateApkFile(context: Context, info: UpdateInfo): File =
-        File(
-            File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "apk"),
-            "TiebaLite-${info.versionName}.apk",
-        )
+    suspend fun findDownloadedApk(context: Context, info: UpdateInfo): File? = withContext(Dispatchers.IO) {
+        updateApkFile(context, info)?.takeIf { isCompleteApk(it, info.apkSize) }
+    }
+
+    private fun updateApkFile(context: Context, info: UpdateInfo): File? {
+        val downloads = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: return null
+        val name = info.versionName.replace(invalidFilenameChars, "_").take(100)
+        return File(File(downloads, "apk"), "TiebaLite-$name.apk")
+    }
+
+    private fun isCompleteApk(file: File, expectedSize: Long): Boolean {
+        if (!file.isFile || file.length() == 0L) return false
+        if (expectedSize > 0 && file.length() != expectedSize) return false
+        return try {
+            ZipFile(file).use { it.getEntry("AndroidManifest.xml") != null }
+        } catch (e: IOException) {
+            false
+        }
+    }
 
     private data class DownloadProgress(
         val status: Int,

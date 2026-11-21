@@ -1,6 +1,5 @@
 package com.huanchengfly.tieba.post.components.viewer
 
-import android.util.Log
 import android.view.View
 import android.widget.ImageView
 import androidx.lifecycle.Lifecycle
@@ -15,8 +14,7 @@ import com.github.iielse.imageviewer.core.ImageLoader
 import com.github.iielse.imageviewer.core.Photo
 import com.github.iielse.imageviewer.widgets.video.ExoVideoView2
 import com.huanchengfly.tieba.post.R
-import com.huanchengfly.tieba.post.components.coil.SubsamplingScaleTarget.Companion.SubsamplingImage
-import com.huanchengfly.tieba.post.components.coil.SubsamplingScaleTarget.Companion.load
+import com.huanchengfly.tieba.post.components.coil.SubsamplingImageBinding
 import com.huanchengfly.tieba.post.ui.page.photoview.PhotoViewItem
 
 class SimpleImageLoader(
@@ -52,25 +50,6 @@ class SimpleImageLoader(
         if (data !is PhotoViewItem) throw RuntimeException("Not implemented: ${data::class.simpleName}")
 
         subsamplingView.setOnClickListener(onClick)
-        subsamplingView.load(data = data.originUrl, imageLoader = loader) {
-            error(R.drawable.ic_error)
-            lifecycle(lifecycle)
-            listener(
-                onStart = {
-                    subsamplingView.setTag(R.id.image_load_tag, data.originUrl)
-                },
-                onError = { _, result ->
-                    Log.w(SimpleImageLoader::class.simpleName, "onError: ${result.throwable.message}")
-                },
-                onSuccess = { request, _ ->
-                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
-                        subsamplingView.getTag(R.id.image_load_tag) == data.originUrl
-                    ) {
-                        val cache = loader.diskCache!!.openSnapshot(data.originUrl)!!.data
-                        request.target!!.onSuccess(SubsamplingImage(fullImage = cache.toFile()))
-                    }
-                }
-            )
-        }
+        SubsamplingImageBinding(subsamplingView, lifecycle, loader, data.originUrl).bind()
     }
 }

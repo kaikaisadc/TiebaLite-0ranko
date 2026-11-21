@@ -1,11 +1,14 @@
 package com.huanchengfly.tieba.post.utils
 
 import android.content.Context
+import android.net.Uri
+import android.util.Log
 import androidx.annotation.WorkerThread
 import com.huanchengfly.tieba.post.BuildConfig
 import com.huanchengfly.tieba.post.models.database.dao.BlockDao
 import com.huanchengfly.tieba.post.models.database.dao.HiddenThreadDao
 import com.huanchengfly.tieba.post.models.database.dao.TransactionRunner
+import com.huanchengfly.tieba.post.repository.user.DataStoreSettingsRepository
 import com.huanchengfly.tieba.post.repository.user.SettingsRepository
 import com.huanchengfly.tieba.post.ui.models.settings.AutoUpdateCheckInterval
 import com.huanchengfly.tieba.post.ui.models.settings.BlockSettings
@@ -29,16 +32,18 @@ import com.huanchengfly.tieba.post.ui.models.settings.ThemeSettings
 import com.huanchengfly.tieba.post.ui.models.settings.ThemeSettingsDto
 import com.huanchengfly.tieba.post.ui.models.settings.UISettings
 import com.huanchengfly.tieba.post.ui.models.settings.UISettingsDto
-import com.huanchengfly.tieba.post.ui.models.settings.UpdateSettings
 import com.huanchengfly.tieba.post.ui.models.settings.UpdateSettingsDto
 import com.google.android.material.color.utilities.Variant
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.huanchengfly.tieba.post.ui.models.settings.CompactReplyBarPosition
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -50,6 +55,10 @@ import java.util.zip.ZipOutputStream
 object SettingsBackupUtil {
     const val SCHEMA_VERSION = 1
     const val FILE_EXTENSION = "tbsettings"
+
+    private const val MAX_ENTRIES = 32
+    private const val MAX_JSON_BYTES = 2L * 1024 * 1024
+    private const val MAX_FILE_BYTES = 32L * 1024 * 1024
 
     private val json = Json {
         encodeDefaults = true
@@ -74,10 +83,12 @@ object SettingsBackupUtil {
     fun readMetadata(input: InputStream): SettingsBackupMetadata {
         ZipInputStream(input).use { zipIn ->
             var entry = zipIn.nextEntry
-            while (entry != null) {
-                if (entry.name == ENTRY_NAME_METADATA) {
-                    return json.decodeFromString<SettingsBackupMetadata>(zipIn.readBytes().decodeToString())
+            repeat(MAX_ENTRIES) {
+                if (entry == null) return@use
+                if (entry?.name == ENTRY_NAME_METADATA) {
+                    return json.decodeFromString<SettingsBackupMetadata>(zipIn.readBackupJson())
                 }
+                zipIn.copyBackupEntryTo(null, MAX_FILE_BYTES)
                 zipIn.closeEntry()
                 entry = zipIn.nextEntry
             }
@@ -175,7 +186,7 @@ object SettingsBackupUtil {
     @Throws(IOException::class, SerializationException::class)
     suspend fun restore(
         context: Context,
-        settingsRepository: SettingsRepository,
+        settingsRepository: DataStoreSettingsRepository,
         input: InputStream,
         includeSettings: Boolean,
         includeBlockRules: Boolean,
@@ -184,114 +195,128 @@ object SettingsBackupUtil {
         transactionRunner: TransactionRunner,
         restoreOption: Int = 0,
     ): Unit = withContext(Dispatchers.IO) {
+        var metadata: SettingsBackupMetadata? = null
         var payload: SettingsBackupPayload? = null
-        var blockRulesFile: File? = null
+        var rulesFile: File? = null
         var wallpaperFile: File? = null
-
-        ZipInputStream(input).use { zipIn ->
-            var entry = zipIn.nextEntry
-            while (entry != null) {
-                when (entry.name) {
-                    ENTRY_NAME_SETTINGS -> {
-                        payload = json.decodeFromString<SettingsBackupPayload>(
-                            zipIn.readBytes().decodeToString()
-                        )
-                    }
-
-                    ENTRY_NAME_BLOCK_RULES -> if (includeBlockRules) {
-                        val temp = File.createTempFile("settings_restore_", ".tbrules", context.cacheDir)
-                        temp.outputStream().use { stream -> zipIn.copyTo(stream) }
-                        blockRulesFile = temp
-                    }
-
-                    ENTRY_NAME_WALLPAPER -> if (includeSettings) {
-                        val target = File(
-                            context.filesDir,
-                            "background_${System.currentTimeMillis()}.webp"
-                        )
-                        target.outputStream().use { stream -> zipIn.copyTo(stream) }
-                        wallpaperFile = target
-                    }
-                }
-                zipIn.closeEntry()
-                entry = zipIn.nextEntry
-            }
-        }
-
+        var wallpaperInstalled = false
         try {
-            val currentPayload = payload
-            if (includeSettings && currentPayload == null) {
-                throw IOException("Settings payload not found")
-            }
-            if (includeBlockRules && blockRulesFile == null) {
-                throw IOException("Block rules not found")
+            ZipInputStream(input).use { zip ->
+                val entries = mutableSetOf<String>()
+                while (true) {
+                    coroutineContext.ensureActive()
+                    val entry = zip.nextEntry ?: break
+                    if (!entries.add(entry.name)) throw IOException("Duplicate backup entry: ${entry.name}")
+                    if (entries.size > MAX_ENTRIES) throw IOException("Too many backup entries")
+                    when {
+                        entry.name == ENTRY_NAME_METADATA -> metadata = json.decodeFromString(zip.readBackupJson())
+                        includeSettings && entry.name == ENTRY_NAME_SETTINGS -> {
+                            payload = json.decodeFromString(zip.readBackupJson())
+                        }
+                        includeBlockRules && entry.name == ENTRY_NAME_BLOCK_RULES -> {
+                            val file = File.createTempFile("settings_restore_", ".tbrules", context.cacheDir)
+                            rulesFile = file
+                            file.outputStream().use { zip.copyBackupEntryTo(it, MAX_FILE_BYTES) }
+                        }
+                        includeSettings && entry.name == ENTRY_NAME_WALLPAPER -> {
+                            val file = File.createTempFile("background_", ".webp", context.filesDir)
+                            wallpaperFile = file
+                            file.outputStream().use { zip.copyBackupEntryTo(it, MAX_FILE_BYTES) }
+                        }
+                        else -> zip.copyBackupEntryTo(null, MAX_FILE_BYTES)
+                    }
+                    zip.closeEntry()
+                }
             }
 
-            if (includeSettings && currentPayload != null) {
-                restoreSettings(context, settingsRepository, currentPayload, wallpaperFile?.name)
+            val header = metadata ?: throw IOException("Settings backup metadata not found")
+            if (header.schemaVersion !in 1..SCHEMA_VERSION) throw IOException("Unsupported settings backup version")
+            val settings = if (includeSettings) payload ?: throw IOException("Settings payload not found") else null
+            if (includeSettings && header.containsWallpaper && wallpaperFile == null) {
+                throw IOException("Wallpaper not found")
             }
-            if (includeBlockRules) {
-                val temp = blockRulesFile ?: throw IOException("Block rules not found")
-                temp.inputStream().use { stream ->
-                    BlockRuleBackupUtil.restore(
-                        dao = blockDao,
-                        hiddenDao = hiddenDao,
-                        transaction = transactionRunner,
-                        input = stream,
-                        restoreOption = restoreOption,
-                    )
+            val wallpaper = wallpaperFile?.takeIf { settings?.themeSettings != null }
+            wallpaper?.let { CoilUtil.decodeRawDimensions(context, Uri.fromFile(it)).getOrThrow() }
+            val rules = if (includeBlockRules) {
+                val file = rulesFile ?: throw IOException("Block rules not found")
+                file.inputStream().use { BlockRuleBackupUtil.readRules(it, restoreOption) }
+            } else null
+            val values = settings?.toSettingsValues(wallpaper?.name)
+
+            coroutineContext.ensureActive()
+            withContext(NonCancellable) {
+                if (values != null) {
+                    settingsRepository.restoreSettings(values) { writeSettings ->
+                        if (rules == null) {
+                            writeSettings()
+                        } else {
+                            transactionRunner {
+                                rules.applyTo(blockDao, hiddenDao)
+                                writeSettings()
+                            }
+                        }
+                    }
+                    wallpaperInstalled = wallpaper != null
+                    values.ui?.let {
+                        try {
+                            AppIconUtil.setIcon(it.appIcon, context)
+                        } catch (e: Exception) {
+                            Log.w("SettingsBackup", "Unable to apply restored launcher icon", e)
+                        }
+                    }
+                } else if (rules != null) {
+                    transactionRunner { rules.applyTo(blockDao, hiddenDao) }
                 }
             }
         } finally {
-            blockRulesFile?.delete()
+            rulesFile?.delete()
+            if (!wallpaperInstalled) wallpaperFile?.let { file ->
+                withContext(NonCancellable) {
+                    val inUse = runCatching {
+                        settingsRepository.themeSettings.snapshot().transBackground == file.name
+                    }.getOrDefault(true)
+                    if (!inUse) file.delete()
+                }
+            }
         }
     }
 
-    private suspend fun restoreSettings(
-        context: Context,
-        settingsRepository: SettingsRepository,
-        payload: SettingsBackupPayload,
-        wallpaperName: String?,
-    ) {
-        payload.blockSettings?.let {
-            settingsRepository.blockSettings.setNow(
-                BlockSettings(blockVideo = it.blockVideo, hideBlocked = it.hideBlocked)
-            )
-        }
-        payload.fontScale?.let { settingsRepository.fontScale.setNow(it) }
-        payload.habitSettings?.let { settingsRepository.habitSettings.setNow(it.toModel()) }
-        payload.privacySettings?.let {
-            settingsRepository.privacySettings.setNow(
-                PrivacySettings(readClipBoardLink = it.readClipBoardLink)
-            )
-        }
-        payload.themeSettings?.let {
-            settingsRepository.themeSettings.setNow(it.toModel(wallpaperName))
-        }
-        payload.uiSettings?.let {
-            val currentUi = settingsRepository.uiSettings.snapshot()
-            val newUi = it.toModel().copy(setupFinished = currentUi.setupFinished)
-            settingsRepository.uiSettings.setNow(newUi)
-            if (currentUi.appIcon != newUi.appIcon) {
-                AppIconUtil.setIcon(newUi.appIcon, context)
-            }
+    private fun SettingsBackupPayload.toSettingsValues(wallpaperName: String?) =
+        DataStoreSettingsRepository.BackupSettingsValues(
+            block = blockSettings?.let { BlockSettings(blockVideo = it.blockVideo, hideBlocked = it.hideBlocked) },
+            fontScale = fontScale,
+            habit = habitSettings?.toModel(),
+            privacy = privacySettings?.let { PrivacySettings(readClipBoardLink = it.readClipBoardLink) },
+            theme = themeSettings?.toModel(wallpaperName),
+            ui = uiSettings?.toModel(),
+            update = updateSettings?.let { restored ->
+                { current ->
+                    current.copy(
+                        backgroundDownload = restored.backgroundDownload,
+                        autoUpdateCheckInterval = restored.autoUpdateCheckInterval
+                            ?.let { enumOrDefault(it, AutoUpdateCheckInterval.EVERY_LAUNCH) }
+                            ?: current.autoUpdateCheckInterval,
+                    )
+                }
+            },
+            sign = signSettings?.toModel(),
+        )
 
+    private fun ZipInputStream.readBackupJson(): String =
+        ByteArrayOutputStream().use { output ->
+            copyBackupEntryTo(output, MAX_JSON_BYTES)
+            output.toString(Charsets.UTF_8.name())
         }
-        payload.updateSettings?.let {
-            val current = settingsRepository.updateSettings.snapshot()
-            val interval = it.autoUpdateCheckInterval
-                ?.let { name -> enumOrDefault(name, AutoUpdateCheckInterval.EVERY_LAUNCH) }
-                ?: current.autoUpdateCheckInterval
-            settingsRepository.updateSettings.setNow(
-                UpdateSettings(
-                    backgroundDownload = it.backgroundDownload,
-                    autoUpdateCheckInterval = interval,
-                    lastAutoUpdateCheckAt = current.lastAutoUpdateCheckAt,
-                )
-            )
-        }
-        payload.signSettings?.let {
-            settingsRepository.signConfig.setNow(it.toModel())
+
+    private fun ZipInputStream.copyBackupEntryTo(output: OutputStream?, limit: Long) {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var remaining = limit
+        while (true) {
+            val count = read(buffer)
+            if (count == -1) return
+            remaining -= count
+            if (remaining < 0) throw IOException("Backup entry is too large")
+            output?.write(buffer, 0, count)
         }
     }
 
