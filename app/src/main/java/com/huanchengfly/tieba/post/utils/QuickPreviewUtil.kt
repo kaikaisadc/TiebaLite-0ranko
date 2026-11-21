@@ -13,31 +13,26 @@ import com.huanchengfly.tieba.post.repository.PbPageRepository
 
 object QuickPreviewUtil {
     fun getThreadId(uri: Uri): Long? {
-        val path = uri.path?: return null
-        if (uri.host == null || path.isEmpty()) return null
+        val path = uri.path ?: return null
+        if (uri.host == null) return null
 
-        if (path.equals("/f", ignoreCase = true) || path.equals("/mo/q/m", ignoreCase = true)) {
-            return uri.getQueryParameter("kz")?.toLongOrNull()
-        }
+        val id = when {
+            path.equals("/f", ignoreCase = true) || path.equals("/mo/q/m", ignoreCase = true) ->
+                uri.getQueryParameter("kz")
 
-        if (path.startsWith("/p/")) {
-            return runCatching {
-                val paramIndex = path.indexOf('&').takeUnless { it == -1 } ?: path.length
-                path.substring(3, paramIndex).toLong()
-            }.getOrNull()
+            path.startsWith("/p/") -> path.substring(3).substringBefore('&').removeSuffix("/")
+
+            else -> null
         }
-        return null
+        return id?.toLongOrNull()?.takeIf { it > 0 }
     }
 
     fun getForumName(uri: Uri): String? {
-        val path = uri.path?: return null
-        if (uri.host == null || path.isEmpty()) return null
-
-        val word = uri.getQueryParameter("word")
+        val path = uri.path ?: return null
+        if (uri.host == null) return null
         if (path.equals("/f", ignoreCase = true) || path.equals("/mo/q/m", ignoreCase = true)) {
-            val kw = uri.getQueryParameter("kw")
-            if (kw != null) return kw
-            if (word != null) return word
+            return uri.getQueryParameter("kw")?.takeIf { it.isNotBlank() }
+                ?: uri.getQueryParameter("word")?.takeIf { it.isNotBlank() }
         }
         return null
     }

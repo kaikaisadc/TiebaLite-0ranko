@@ -9,7 +9,6 @@ import com.google.common.net.InternetDomainName
 import com.huanchengfly.tieba.post.App
 import com.huanchengfly.tieba.post.R
 import com.huanchengfly.tieba.post.api.retrofit.exception.getErrorMessage
-import com.huanchengfly.tieba.post.api.urlDecode
 import com.huanchengfly.tieba.post.arch.ControlledRunner
 import com.huanchengfly.tieba.post.components.ClipBoardLinkDetector.checkClipBoard
 import com.huanchengfly.tieba.post.repository.ForumRepository
@@ -25,8 +24,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
-import org.intellij.lang.annotations.RegExp
-import java.util.regex.Pattern
 
 sealed class ClipBoardLink(val url: String) {
 
@@ -54,12 +51,7 @@ sealed class ClipBoardLink(val url: String) {
  * */
 object ClipBoardLinkDetector {
 
-    private val pattern by lazy {
-        Pattern.compile(
-            @RegExp
-            "((http|https)://)(([a-zA-Z0-9._-]+\\.[a-zA-Z]{2,6})|([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}))(:[0-9]{1,4})*(/[a-zA-Z0-9&%_./-~-]*)?"
-        )
-    }
+    private val linkPattern = Regex("""https?://[^\s<>"'，。！？；、）】》]+""", RegexOption.IGNORE_CASE)
 
     val clipBoardManager by lazy {
         App.INSTANCE.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -73,16 +65,16 @@ object ClipBoardLinkDetector {
     @Volatile
     private var lastClipBoardHash: Int = -1
 
-    private fun parseLink(url: String): ClipBoardLink? {
-        if (isTieba(url)) {
-            val uri = url.toUri().normalizeScheme()
-            QuickPreviewUtil.getForumName(uri)?.let {
-                return ClipBoardLink.Forum(url, forumName = it)
-            }
+    private fun parseLink(uri: Uri): ClipBoardLink? {
+        val url = uri.toString()
+        if (!isTieba(url)) return null
 
-            QuickPreviewUtil.getThreadId(uri)?.let {
-                return ClipBoardLink.Thread(url, threadId = it)
-            }
+        QuickPreviewUtil.getThreadId(uri)?.let {
+            return ClipBoardLink.Thread(url, threadId = it)
+        }
+
+        QuickPreviewUtil.getForumName(uri)?.let {
+            return ClipBoardLink.Forum(url, forumName = it)
         }
 
         return null
@@ -92,22 +84,21 @@ object ClipBoardLinkDetector {
         if (uri.scheme == "com.baidu.tieba" && uri.host == "unidispatch") {
             when (val path = uri.path?.lowercase()) {
                 "/frs" -> {
-                    val forumName = uri.getQueryParameter("kw") ?: throw IllegalArgumentException("kw not found")
-                    ClipBoardLink.Forum("https://tieba.baidu.com/f?kw=$forumName", forumName)
+                    val forumName = uri.getQueryParameter("kw")?.takeIf { it.isNotBlank() }
+                        ?: throw IllegalArgumentException("kw not found")
+                    ClipBoardLink.Forum("https://tieba.baidu.com/f?kw=${Uri.encode(forumName)}", forumName)
                 }
 
                 "/pb" -> {
-                    val threadId = uri.getQueryParameter("tid") ?: throw IllegalArgumentException("tid not found")
-                    ClipBoardLink.Thread(
-                        url = "https://tieba.baidu.com/p/$threadId",
-                        threadId = threadId.toLongOrNull() ?: throw IllegalArgumentException("Illegal tid $threadId")
-                    )
+                    val threadId = uri.getQueryParameter("tid")?.toLongOrNull()?.takeIf { it > 0 }
+                        ?: throw IllegalArgumentException("Invalid tid")
+                    ClipBoardLink.Thread("https://tieba.baidu.com/p/$threadId", threadId)
                 }
 
                 else -> throw IllegalArgumentException("Unsupported unidispatch path: $path.")
             }
         } else {
-            parseLink(uri.toString().urlDecode())
+            parseLink(uri.normalizeScheme())
         }
     }
 
@@ -117,8 +108,10 @@ object ClipBoardLinkDetector {
 
         previewTaskRunner.cancelPreviousThenRun {
             val clipBoardLink = withContext(Dispatchers.Default) {
-                val matcher = pattern.matcher(clipBoardText)
-                if (matcher.find()) parseLink(url = matcher.group()) else null
+                linkPattern.findAll(clipBoardText).firstNotNullOfOrNull { match ->
+                    val url = match.value.trimEnd('.', ',', ';', '!', '?', ')', ']', '}')
+                    parseLink(url.toUri().normalizeScheme())
+                }
             }
             if (clipBoardLink == null) {
                 clear()
