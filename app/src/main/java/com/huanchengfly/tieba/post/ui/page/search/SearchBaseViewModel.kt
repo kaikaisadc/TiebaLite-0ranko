@@ -1,18 +1,14 @@
 package com.huanchengfly.tieba.post.ui.page.search
 
 import androidx.compose.runtime.Immutable
-import com.huanchengfly.tieba.post.arch.BaseStateViewModel
 import com.huanchengfly.tieba.post.arch.CommonUiEvent
 import com.huanchengfly.tieba.post.arch.TbLiteExceptionHandler
 import com.huanchengfly.tieba.post.arch.UiState
 import com.huanchengfly.tieba.post.repository.SearchResult
-import com.huanchengfly.tieba.post.utils.extension.set
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.update
 
 @Immutable
-open class BaseSearchUiState<T>(
+data class BaseSearchUiState<T>(
     val keyword: String = "",
     val exactMatch: T? = null,
     val fuzzyMatch: List<T> = emptyList(),
@@ -22,19 +18,9 @@ open class BaseSearchUiState<T>(
 
     val isEmpty: Boolean
         get() = exactMatch == null && fuzzyMatch.isEmpty()
-
-    fun copy(
-        keyword: String = this.keyword,
-        exactMatch: T? = this.exactMatch,
-        fuzzyMatch: List<T> = this.fuzzyMatch,
-        isRefreshing: Boolean = this.isRefreshing,
-        error: Throwable? = this.error,
-    ) = BaseSearchUiState(keyword, exactMatch, fuzzyMatch, isRefreshing, error)
 }
 
-abstract class SearchBaseViewModel<T>: BaseStateViewModel<BaseSearchUiState<T>>() {
-
-    private var searchJob: Job? = null
+abstract class SearchBaseViewModel<T> : SearchResultsViewModel<BaseSearchUiState<T>>() {
 
     override val errorHandler = TbLiteExceptionHandler(this::class.java.simpleName) { _, e, suppressed ->
         if (suppressed && !currentState.isEmpty) {
@@ -50,14 +36,14 @@ abstract class SearchBaseViewModel<T>: BaseStateViewModel<BaseSearchUiState<T>>(
     protected abstract suspend fun search(keyword: String): SearchResult<T>
 
     private fun searchInternal(keyword: String) {
-        searchJob?.cancel()
-        _uiState.set { BaseSearchUiState(keyword, isRefreshing = keyword.isNotBlank()) }
-        if (keyword.isBlank()) return
+        val isRefreshing = keyword.isNotBlank()
+        _uiState.value = BaseSearchUiState(keyword, isRefreshing = isRefreshing)
+        if (!isRefreshing) {
+            cancelSearch()
+            return
+        }
 
-        searchJob = launchJobInVM {
-            val result = runCatching { search(keyword) }
-            ensureActive()
-            val (exactMatch, fuzzyMatch) = result.getOrThrow()
+        launchSearch(load = { search(keyword) }) { (exactMatch, fuzzyMatch) ->
             _uiState.update {
                 it.copy(exactMatch = exactMatch, fuzzyMatch = fuzzyMatch, isRefreshing = false)
             }
@@ -65,11 +51,11 @@ abstract class SearchBaseViewModel<T>: BaseStateViewModel<BaseSearchUiState<T>>(
     }
 
     fun onKeywordChanged(keyword: String) {
-        if (currentState.keyword != keyword) searchInternal(keyword) else return
+        if (currentState.keyword != keyword) searchInternal(keyword)
     }
 
     fun onRefresh() {
-        val uiStateSnapshot = currentState
-        if (uiStateSnapshot.isRefreshing) return else searchInternal(uiStateSnapshot.keyword)
+        val state = currentState
+        if (!state.isRefreshing) searchInternal(state.keyword)
     }
 }

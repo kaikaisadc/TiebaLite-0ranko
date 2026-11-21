@@ -1,7 +1,6 @@
 package com.huanchengfly.tieba.post.utils
 
 import android.content.Context
-import android.net.Uri
 import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Immutable
 import com.huanchengfly.tieba.post.R
@@ -12,31 +11,6 @@ import com.huanchengfly.tieba.post.repository.ForumRepository
 import com.huanchengfly.tieba.post.repository.PbPageRepository
 
 object QuickPreviewUtil {
-    fun getThreadId(uri: Uri): Long? {
-        val path = uri.path ?: return null
-        if (uri.host == null) return null
-
-        val id = when {
-            path.equals("/f", ignoreCase = true) || path.equals("/mo/q/m", ignoreCase = true) ->
-                uri.getQueryParameter("kz")
-
-            path.startsWith("/p/") -> path.substring(3).substringBefore('&').removeSuffix("/")
-
-            else -> null
-        }
-        return id?.toLongOrNull()?.takeIf { it > 0 }
-    }
-
-    fun getForumName(uri: Uri): String? {
-        val path = uri.path ?: return null
-        if (uri.host == null) return null
-        if (path.equals("/f", ignoreCase = true) || path.equals("/mo/q/m", ignoreCase = true)) {
-            return uri.getQueryParameter("kw")?.takeIf { it.isNotBlank() }
-                ?: uri.getQueryParameter("word")?.takeIf { it.isNotBlank() }
-        }
-        return null
-    }
-
     private suspend fun loadThreadPreview(
         context: Context,
         link: ClipBoardLink.Thread,

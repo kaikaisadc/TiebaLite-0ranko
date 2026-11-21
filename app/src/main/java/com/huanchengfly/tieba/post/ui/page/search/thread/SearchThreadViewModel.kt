@@ -4,17 +4,14 @@ import androidx.annotation.IntDef
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.util.fastDistinctBy
-import com.huanchengfly.tieba.post.arch.BaseStateViewModel
 import com.huanchengfly.tieba.post.arch.CommonUiEvent
 import com.huanchengfly.tieba.post.arch.TbLiteExceptionHandler
 import com.huanchengfly.tieba.post.arch.UiState
 import com.huanchengfly.tieba.post.repository.SearchRepository
 import com.huanchengfly.tieba.post.ui.models.search.SearchThreadInfo
-import com.huanchengfly.tieba.post.utils.extension.set
+import com.huanchengfly.tieba.post.ui.page.search.SearchResultsViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.withContext
@@ -42,9 +39,7 @@ private const val TAG = "SearchThreadViewModel"
 @HiltViewModel
 class SearchThreadViewModel @Inject constructor(
     private val searchRepo: SearchRepository
-) : BaseStateViewModel<SearchThreadUiState>() {
-
-    private var searchJob: Job? = null
+) : SearchResultsViewModel<SearchThreadUiState>() {
 
     override val errorHandler = TbLiteExceptionHandler(TAG) { _, e, suppressed ->
         if (suppressed && !currentState.isEmpty) {
@@ -57,20 +52,40 @@ class SearchThreadViewModel @Inject constructor(
 
     override fun createInitialState(): SearchThreadUiState = SearchThreadUiState()
 
-    private fun searchThreadInternal(keyword: String) {
-        searchJob?.cancel()
-        if (keyword.isBlank()) {
-            _uiState.set { SearchThreadUiState(isRefreshing = false, keyword = keyword, sortType = sortType) }
-            return // on clear
+    private fun searchThreadInternal(
+        keyword: String,
+        @SearchThreadSortType sortType: Int = currentState.sortType,
+    ) {
+        val state = SearchThreadUiState(
+            keyword = keyword,
+            sortType = sortType,
+            isRefreshing = keyword.isNotBlank(),
+        )
+        _uiState.value = state
+        if (state.isRefreshing) {
+            loadPage(state, page = 1)
+        } else {
+            cancelSearch()
         }
+    }
 
-        val uiStateSnapshot = _uiState.updateAndGet { SearchThreadUiState(keyword = keyword, sortType = it.sortType) }
-        searchJob = launchJobInVM {
-            val result = runCatching { searchRepo.searchThread(keyword, page = 1, uiStateSnapshot.sortType) }
-            ensureActive()
-            val (hasMore, threads) = result.getOrThrow()
-            _uiState.update {
-                it.copy(isRefreshing = false, hasMore = hasMore, data = threads)
+    private fun loadPage(request: SearchThreadUiState, page: Int) {
+        launchSearch(
+            load = {
+                val result = searchRepo.searchThread(request.keyword, page, request.sortType)
+                if (page == 1) result else withContext(Dispatchers.Default) {
+                    result.copy(items = (request.data + result.items).fastDistinctBy { it.lazyListKey })
+                }
+            },
+        ) { (hasMore, items) ->
+            _uiState.update { state ->
+                if (page > 1 && state !== request) state else state.copy(
+                    isRefreshing = false,
+                    isLoadingMore = false,
+                    currentPage = page,
+                    hasMore = hasMore,
+                    data = items,
+                )
             }
         }
     }
@@ -79,42 +94,22 @@ class SearchThreadViewModel @Inject constructor(
         val state = currentState
         if (state.isRefreshing || state.isLoadingMore || !state.hasMore) return
 
-        val uiStateSnapshot = _uiState.updateAndGet { it.copy(isLoadingMore = true) }
-        searchJob = launchJobInVM {
-            val page = uiStateSnapshot.currentPage + 1
-            val result = runCatching {
-                searchRepo.searchThread(uiStateSnapshot.keyword, page, uiStateSnapshot.sortType)
-            }
-            ensureActive()
-            val (hasMore, threads) = result.getOrThrow()
-            // Old threads + new threads
-            val newData = withContext(Dispatchers.Default) {
-                (uiStateSnapshot.data + threads).fastDistinctBy { it.lazyListKey }
-            }
-            _uiState.update {
-                if (it === uiStateSnapshot) {
-                    it.copy(isLoadingMore = false, currentPage = page, hasMore = hasMore, data = newData)
-                } else {
-                    it // state changed during loading, skip update
-                }
-            }
-        }
+        val request = _uiState.updateAndGet { it.copy(isLoadingMore = true) }
+        loadPage(request, page = request.currentPage + 1)
     }
 
     fun onKeywordChanged(keyword: String) {
-        if (currentState.keyword != keyword) searchThreadInternal(keyword) else return
+        if (currentState.keyword != keyword) searchThreadInternal(keyword)
     }
 
     fun onRefresh() {
-        val uiStateSnapshot = currentState
-        if (uiStateSnapshot.isRefreshing) return else searchThreadInternal(uiStateSnapshot.keyword)
+        val state = currentState
+        if (!state.isRefreshing) searchThreadInternal(state.keyword)
     }
 
     fun onSortTypeChanged(@SearchThreadSortType sortType: Int) {
-        if (currentState.sortType != sortType) {
-            val oldState = _uiState.updateAndGet { it.copy(sortType = sortType) }
-            searchThreadInternal(oldState.keyword)
-        }
+        val state = currentState
+        if (state.sortType != sortType) searchThreadInternal(state.keyword, sortType)
     }
 }
 

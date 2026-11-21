@@ -11,6 +11,7 @@ import androidx.compose.ui.text.withAnnotation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.util.fastMapNotNull
 import com.huanchengfly.tieba.post.api.models.SearchForumBean.ForumInfoBean
+import com.huanchengfly.tieba.post.api.models.SearchThreadBean
 import com.huanchengfly.tieba.post.api.models.SearchThreadBean.MediaInfo.Companion.TYPE_PICTURE
 import com.huanchengfly.tieba.post.api.models.SearchThreadBean.MediaInfo.Companion.TYPE_VIDEO
 import com.huanchengfly.tieba.post.api.models.SearchThreadBean.ThreadInfoBean
@@ -45,8 +46,10 @@ import java.util.regex.Pattern
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// HasMore, Threads
-typealias SearchThreadResult = Pair<Boolean, List<SearchThreadInfo>>
+data class SearchThreadResult(
+    val hasMore: Boolean,
+    val items: List<SearchThreadInfo>,
+)
 
 data class SearchResult<T>(
     val exactMatch: T?,
@@ -87,21 +90,21 @@ class SearchRepository @Inject constructor(
         forumId: Long,
         sortType: Int,
         filterType: Int,
-        page: Int
+        page: Int,
     ): SearchThreadResult {
         val data = networkDataSource.searchPost(keyword, forumName, forumId, sortType, filterType, page)
-        val showBothName = settingsRepo.habitSettings.snapshot().showBothName
-        val keywordPatterns = keyword.toKeywordPatterns()
-        val posts = data.postList.mapUiModel(keywordPatterns, context, showBothName)
-        return SearchThreadResult(data.hasMore == 1, posts)
+        return mapThreadResult(keyword, data)
     }
 
-    suspend fun searchThread(keyword: String, page: Int, sortType: Int): SearchThreadResult {
-        val data = networkDataSource.searchThread(keyword, page, sortType)
+    suspend fun searchThread(keyword: String, page: Int, sortType: Int): SearchThreadResult =
+        mapThreadResult(keyword, networkDataSource.searchThread(keyword, page, sortType))
+
+    private suspend fun mapThreadResult(keyword: String, data: SearchThreadBean.DataBean): SearchThreadResult {
         val showBothName = settingsRepo.habitSettings.snapshot().showBothName
-        val keywordPatterns = keyword.toKeywordPatterns()
-        val threads = data.postList.mapUiModel(keywordPatterns, context, showBothName)
-        return SearchThreadResult(data.hasMore == 1, threads)
+        return SearchThreadResult(
+            hasMore = data.hasMore == 1,
+            items = data.postList.mapUiModel(keyword.toKeywordPatterns(), context, showBothName),
+        )
     }
 
     suspend fun searchUser(keyword: String): SearchResult<SearchUser> {
@@ -115,7 +118,7 @@ class SearchRepository @Inject constructor(
     }
 
     suspend fun addHistory(keyword: String) {
-        require(keyword.isNotBlank() && keyword.isNotEmpty()) { "Invalid search keyword" }
+        require(keyword.isNotBlank()) { "Invalid search keyword" }
         historyDao.upsert(SearchHistory(keyword))
     }
 
@@ -128,7 +131,7 @@ class SearchRepository @Inject constructor(
     fun getHistoryFlow(): Flow<List<String>> = historyDao.observeAllKeywords()
 
     suspend fun addPostHistory(forumId: Long, keyword: String) {
-        require(keyword.isNotBlank() && keyword.isNotEmpty()) { "Invalid search keyword" }
+        require(keyword.isNotBlank()) { "Invalid search keyword" }
         require(forumId > 0) { "Invalid forum ID $forumId" }
         postHistoryDao.upsert(SearchPostHistory(forumId, keyword))
     }

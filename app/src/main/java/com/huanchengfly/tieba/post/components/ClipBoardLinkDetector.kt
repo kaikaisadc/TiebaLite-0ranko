@@ -66,19 +66,29 @@ object ClipBoardLinkDetector {
     private var lastClipBoardHash: Int = -1
 
     private fun parseLink(uri: Uri): ClipBoardLink? {
+        if (!uri.isTieba()) return null
+
+        val path = uri.path ?: return null
         val url = uri.toString()
-        if (!isTieba(url)) return null
-
-        QuickPreviewUtil.getThreadId(uri)?.let {
-            return ClipBoardLink.Thread(url, threadId = it)
+        val isLegacyPath = path.equals("/f", ignoreCase = true) || path.equals("/mo/q/m", ignoreCase = true)
+        val threadId = when {
+            path.startsWith("/p/") -> path.removePrefix("/p/")
+                .substringBefore('&')
+                .removeSuffix("/")
+                .toThreadId()
+            isLegacyPath -> uri.getQueryParameter("kz").toThreadId()
+            else -> null
         }
+        if (threadId != null) return ClipBoardLink.Thread(url, threadId)
 
-        QuickPreviewUtil.getForumName(uri)?.let {
-            return ClipBoardLink.Forum(url, forumName = it)
-        }
-
-        return null
+        if (!isLegacyPath) return null
+        val forumName = uri.getQueryParameter("kw")?.takeIf { it.isNotBlank() }
+            ?: uri.getQueryParameter("word")?.takeIf { it.isNotBlank() }
+            ?: return null
+        return ClipBoardLink.Forum(url, forumName)
     }
+
+    private fun String?.toThreadId(): Long? = this?.toLongOrNull()?.takeIf { it > 0 }
 
     fun parseDeepLink(uri: Uri): Result<ClipBoardLink?> = runCatching {
         if (uri.scheme == "com.baidu.tieba" && uri.host == "unidispatch") {
@@ -90,7 +100,7 @@ object ClipBoardLinkDetector {
                 }
 
                 "/pb" -> {
-                    val threadId = uri.getQueryParameter("tid")?.toLongOrNull()?.takeIf { it > 0 }
+                    val threadId = uri.getQueryParameter("tid").toThreadId()
                         ?: throw IllegalArgumentException("Invalid tid")
                     ClipBoardLink.Thread("https://tieba.baidu.com/p/$threadId", threadId)
                 }
@@ -184,16 +194,18 @@ object ClipBoardLinkDetector {
 
     fun Uri.isHttp(): Boolean = scheme?.startsWith("http", ignoreCase = true) == true
 
-    fun isTieba(url: String, skipSchemeCheck: Boolean = false): Boolean {
-        try {
-            val uri = url.toUri().normalizeScheme()
-            if (!uri.isBaidu(skipSchemeCheck)) return false
+    fun isTieba(url: String, skipSchemeCheck: Boolean = false): Boolean =
+        url.toUri().normalizeScheme().isTieba(skipSchemeCheck)
 
-            val subDomain = InternetDomainName.from(uri.host!!).parts().first()
-            return (subDomain == "tieba" || subDomain == "tiebac" || subDomain == "wapp") &&
-                    uri.queryParameterNames?.contains("tbjump") != true // Exclude Tieba redirect
+    private fun Uri.isTieba(skipSchemeCheck: Boolean = false): Boolean {
+        if (!isBaidu(skipSchemeCheck)) return false
+        val hostname = host ?: return false
+        return try {
+            val subdomain = InternetDomainName.from(hostname).parts().first()
+            (subdomain == "tieba" || subdomain == "tiebac" || subdomain == "wapp") &&
+                queryParameterNames?.contains("tbjump") != true
         } catch (_: Exception) {
-            return false
+            false
         }
     }
 
