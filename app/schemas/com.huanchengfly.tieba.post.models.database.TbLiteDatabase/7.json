@@ -905,6 +905,7 @@
         "indices": [
           {
             "name": "index_user_last_visit",
+            "unique": false,
             "columnNames": [
               "last_visit"
             ],
