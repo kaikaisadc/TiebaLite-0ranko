@@ -10,9 +10,10 @@ import com.huanchengfly.tieba.post.repository.SearchRepository
 import com.huanchengfly.tieba.post.ui.models.search.SearchThreadInfo
 import com.huanchengfly.tieba.post.ui.page.Destination
 import com.huanchengfly.tieba.post.ui.page.search.SearchUiEvent
-import com.huanchengfly.tieba.post.utils.extension.set
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
@@ -47,6 +48,8 @@ class ForumSearchPostViewModel @Inject constructor(
 
     val forumName: String = params.forumName
     val forumId: Long = params.forumId
+
+    private var searchJob: Job? = null
 
     override val errorHandler = TbLiteExceptionHandler(TAG) { _, e, _ ->
         _uiState.update { it.copy(isRefreshing = false, isLoadingMore = false, error = e) }
@@ -84,39 +87,53 @@ class ForumSearchPostViewModel @Inject constructor(
     }
 
     private fun searchPostInternal(keyword: String, sort: Int? = null, filter: Int? = null) {
-        if (keyword.isEmpty() || keyword.isBlank()) {
-            _uiState.set {
-                ForumSearchPostUiState(isRefreshing = false, keyword = keyword, sortType = sortType, filterType = filterType)
-            }
-            return // on clear
-        }
-
+        searchJob?.cancel()
         val uiStateSnapshot = _uiState.updateAndGet {
-            ForumSearchPostUiState(keyword = keyword, sortType = sort ?: it.sortType, filterType = filter ?: it.filterType)
+            ForumSearchPostUiState(
+                keyword = keyword,
+                isRefreshing = keyword.isNotBlank(),
+                sortType = sort ?: it.sortType,
+                filterType = filter ?: it.filterType,
+            )
         }
+        if (!uiStateSnapshot.isKeywordNotEmpty) return
 
-        launchInVM {
-            val sortType = uiStateSnapshot.sortType
-            val filterType = uiStateSnapshot.filterType
-            val (hasMore, posts) = searchRepo.searchPost(keyword, forumName, forumId, sortType, filterType, page = 1)
+        searchJob = launchJobInVM {
+            val result = runCatching {
+                searchRepo.searchPost(
+                    keyword = keyword,
+                    forumName = forumName,
+                    forumId = forumId,
+                    sortType = uiStateSnapshot.sortType,
+                    filterType = uiStateSnapshot.filterType,
+                    page = 1,
+                )
+            }
+            ensureActive()
+            val (hasMore, posts) = result.getOrThrow()
             _uiState.update { it.copy(isRefreshing = false, hasMore = hasMore, data = posts) }
         }
     }
 
     fun onLoadMore() {
-        if (currentState.isLoadingMore) return
+        val state = currentState
+        if (state.isRefreshing || state.isLoadingMore || !state.hasMore) return
 
         val uiStateSnapshot = _uiState.updateAndGet { it.copy(isLoadingMore = true) }
-        launchInVM {
+        searchJob = launchJobInVM {
             val page = uiStateSnapshot.currentPage + 1
-            val (hasMore, threads) = searchRepo.searchPost(
-                keyword = uiStateSnapshot.keyword,
-                forumName = forumName,
-                forumId = forumId,
-                sortType = uiStateSnapshot.sortType,
-                filterType = uiStateSnapshot.filterType,
-                page = page
-            )
+            val result = runCatching {
+                searchRepo.searchPost(
+                    keyword = uiStateSnapshot.keyword,
+                    forumName = forumName,
+                    forumId = forumId,
+                    sortType = uiStateSnapshot.sortType,
+                    filterType = uiStateSnapshot.filterType,
+                    page = page,
+                )
+            }
+            ensureActive()
+            val (hasMore, threads) = result.getOrThrow()
             val newData = uiStateSnapshot.data + threads
             _uiState.update {
                 if (it === uiStateSnapshot) {
@@ -134,12 +151,13 @@ class ForumSearchPostViewModel @Inject constructor(
     }
 
     fun onSubmitKeyword(keyword: String) {
-        if (keyword != currentState.keyword) {
+        if (keyword == currentState.keyword) return
+        if (keyword.isNotBlank()) {
             launchInVM {
                 searchRepo.addPostHistory(forumId, keyword)
             }
-            searchPostInternal(keyword)
         }
+        searchPostInternal(keyword)
     }
 
     fun onFilterTypeChanged(filterType: Int) {

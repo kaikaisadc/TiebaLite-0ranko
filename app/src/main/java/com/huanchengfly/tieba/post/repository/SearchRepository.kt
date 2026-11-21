@@ -167,10 +167,14 @@ class SearchRepository @Inject constructor(
         /**
          * Map ForumInfo to UI Model
          * */
-        private fun mapUiModel(info: ForumInfoBean) = with(info) {
+        private fun mapUiModel(info: ForumInfoBean): SearchForum? = with(info) {
+            val id = forumId?.takeIf { it > 0 } ?: return@with null
+            val name = forumName?.takeIf { it.isNotBlank() }
+                ?: forumNameShow?.takeIf { it.isNotBlank() }
+                ?: return@with null
             SearchForum(
-                id = info.forumId!!,
-                name = forumName ?: forumNameShow.orEmpty(),
+                id = id,
+                name = name,
                 avatar = avatar.orEmpty(),
                 postNum = info.postNum.takeUnless { it == "0" },
                 concernNum = info.concernNum.takeUnless { it == "0" },
@@ -182,11 +186,14 @@ class SearchRepository @Inject constructor(
          * Map UserBean to UI Model
          * */
         private fun mapUiModel(user: UserBean): SearchUser? = with(user) {
-            val uid = id?.toLongOrNull() ?: return@with null // 用户已注销?
-            val nickname = (showNickname ?: userNickname)!!
-            return SearchUser(
+            val uid = id?.toLongOrNull()?.takeIf { it > 0 } ?: return@with null
+            val nickname = sequenceOf(showNickname, userNickname, name)
+                .filterNotNull()
+                .firstOrNull { it.isNotBlank() }
+                ?: return@with null
+            SearchUser(
                 id = uid,
-                avatar = StringUtil.getAvatarUrl(portrait!!),
+                avatar = StringUtil.getAvatarUrl(portrait),
                 nickname = nickname,
                 username = name?.takeUnless { it.isEmpty() || it == nickname },
                 intro = intro

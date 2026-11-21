@@ -7,6 +7,8 @@ import com.huanchengfly.tieba.post.arch.TbLiteExceptionHandler
 import com.huanchengfly.tieba.post.arch.UiState
 import com.huanchengfly.tieba.post.repository.SearchResult
 import com.huanchengfly.tieba.post.utils.extension.set
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.update
 
 @Immutable
@@ -32,6 +34,8 @@ open class BaseSearchUiState<T>(
 
 abstract class SearchBaseViewModel<T>: BaseStateViewModel<BaseSearchUiState<T>>() {
 
+    private var searchJob: Job? = null
+
     override val errorHandler = TbLiteExceptionHandler(this::class.java.simpleName) { _, e, suppressed ->
         if (suppressed && !currentState.isEmpty) {
             _uiState.update { it.copy(isRefreshing = false, error = null) }
@@ -45,15 +49,15 @@ abstract class SearchBaseViewModel<T>: BaseStateViewModel<BaseSearchUiState<T>>(
 
     protected abstract suspend fun search(keyword: String): SearchResult<T>
 
-    private fun searchForumInternal(keyword: String) {
-        if (keyword.isNotEmpty()) {
-            _uiState.set { BaseSearchUiState(keyword, isRefreshing = true) }
-        } else {
-            _uiState.set { BaseSearchUiState(keyword, isRefreshing = false) }
-            return  // on clear
-        }
-        launchInVM {
-            val (exactMatch, fuzzyMatch) = search(keyword)
+    private fun searchInternal(keyword: String) {
+        searchJob?.cancel()
+        _uiState.set { BaseSearchUiState(keyword, isRefreshing = keyword.isNotBlank()) }
+        if (keyword.isBlank()) return
+
+        searchJob = launchJobInVM {
+            val result = runCatching { search(keyword) }
+            ensureActive()
+            val (exactMatch, fuzzyMatch) = result.getOrThrow()
             _uiState.update {
                 it.copy(exactMatch = exactMatch, fuzzyMatch = fuzzyMatch, isRefreshing = false)
             }
@@ -61,11 +65,11 @@ abstract class SearchBaseViewModel<T>: BaseStateViewModel<BaseSearchUiState<T>>(
     }
 
     fun onKeywordChanged(keyword: String) {
-        if (currentState.keyword != keyword) searchForumInternal(keyword) else return
+        if (currentState.keyword != keyword) searchInternal(keyword) else return
     }
 
     fun onRefresh() {
         val uiStateSnapshot = currentState
-        if (uiStateSnapshot.isRefreshing) return else searchForumInternal(uiStateSnapshot.keyword)
+        if (uiStateSnapshot.isRefreshing) return else searchInternal(uiStateSnapshot.keyword)
     }
 }
