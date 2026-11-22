@@ -1,6 +1,5 @@
 package com.huanchengfly.tieba.post
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -101,7 +100,7 @@ import com.huanchengfly.tieba.post.ui.widgets.compose.video.rememberVideoPreview
 import com.huanchengfly.tieba.post.utils.AccountUtil
 import com.huanchengfly.tieba.post.utils.ClientUtils
 import com.huanchengfly.tieba.post.utils.LocalAccount
-import com.huanchengfly.tieba.post.utils.PermissionUtils.askPermission
+import com.huanchengfly.tieba.post.utils.PermissionUtils.askNotificationPermissionOnStartup
 import com.huanchengfly.tieba.post.utils.QuickPreviewUtil
 import com.huanchengfly.tieba.post.utils.QuickPreviewUtil.PreviewInfo
 import com.huanchengfly.tieba.post.utils.requestIgnoreBatteryOptimizations
@@ -142,12 +141,6 @@ class MainActivityV2 : BaseComposeActivity() {
     /** Used to control the initial welcome screen state in Macrobenchmark */
     private var welcomeScreen: Boolean? = null
 
-    private suspend fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && AccountUtil.isLoggedIn()) {
-            askPermission(R.string.desc_permission_post_notifications, Manifest.permission.POST_NOTIFICATIONS, noRationale = true)
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -157,7 +150,9 @@ class MainActivityV2 : BaseComposeActivity() {
             ClientUtils.refreshActiveTimestamp()
             delay(2000L)
             runCatching {
-                requestNotificationPermission()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && AccountUtil.isLoggedIn()) {
+                    askNotificationPermissionOnStartup()
+                }
             }
         }
 

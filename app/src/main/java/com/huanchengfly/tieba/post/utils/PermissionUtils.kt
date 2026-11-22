@@ -5,6 +5,7 @@ import android.Manifest.permission
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.annotation.StringRes
 import androidx.compose.ui.util.fastAny
 import androidx.core.content.ContextCompat
@@ -16,6 +17,28 @@ import kotlinx.coroutines.channels.getOrElse
 
 
 object PermissionUtils {
+
+    private const val NOTIFICATION_PERMISSION_PREFERENCES = "notification_permission"
+    private const val NOTIFICATION_PERMISSION_HANDLED = "prompt_handled"
+
+    private val Context.notificationPermissionPreferences
+        get() = getSharedPreferences(NOTIFICATION_PERMISSION_PREFERENCES, Context.MODE_PRIVATE)
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    suspend fun FragmentActivity.askNotificationPermissionOnStartup() {
+        if (supportFragmentManager.isStateSaved ||
+            notificationPermissionPreferences.getBoolean(NOTIFICATION_PERMISSION_HANDLED, false)
+        ) return
+
+        val installedPackage = packageInfo
+        if (installedPackage.firstInstallTime != installedPackage.lastUpdateTime) return
+
+        askPermission(
+            R.string.desc_permission_post_notifications,
+            Manifest.permission.POST_NOTIFICATIONS,
+            noRationale = true,
+        )
+    }
 
     /**
      * Turn [Manifest.permission] into text.
@@ -79,6 +102,12 @@ object PermissionUtils {
             throw IllegalArgumentException("${this::class.simpleName} not an instance of FragmentActivity")
         } else if (activity.isFinishing || activity.isDestroyed) {
             throw IllegalStateException("${activity::class.simpleName} destroyed")
+        }
+
+        if (Manifest.permission.POST_NOTIFICATIONS in permissions) {
+            activity.notificationPermissionPreferences.edit()
+                .putBoolean(NOTIFICATION_PERMISSION_HANDLED, true)
+                .apply()
         }
 
         val unGranted = permissions.filter {
