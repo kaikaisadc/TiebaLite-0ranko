@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -107,7 +106,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.util.fastFirstOrNull
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.huanchengfly.tieba.post.LocalCurrentThreadId
@@ -242,54 +240,6 @@ private fun ToggleButton(
             )
         }
     }
-}
-
-private fun LazyListState.middleVisiblePost(uiState: ThreadUiState): PostData? = layoutInfo.run {
-    var postItem = visibleItemsInfo.getOrNull(visibleItemsInfo.size / 2)
-    if (postItem == null || postItem.contentType !== Type.Post) {
-        // Not found, search last visible post
-        postItem = visibleItemsInfo.lastOrNull { it.contentType === Type.Post } ?: return uiState.firstPost
-    }
-    // item key is Post ID
-    val postId = postItem.key as Long
-    return uiState.data.fastFirstOrNull { p -> p.id == postId } ?: uiState.firstPost
-}
-
-/**
- * 该楼层顶部相对视口起始线的位移: >0 表示楼头已滚出视口, <0 表示楼头仍在视口内.
- * 该楼层不在可见范围内时返回 null.
- */
-private fun LazyListState.scrolledPastOffsetInItem(itemIndex: Int): Int? = layoutInfo.run {
-    val item = visibleItemsInfo.firstOrNull { it.index == itemIndex } ?: return null
-    if (itemIndex == firstVisibleItemIndex) {
-        firstVisibleItemScrollOffset
-    } else {
-        viewportStartOffset - item.offset
-    }
-}
-
-/**
- * 评论导航的锚点: 取视口顶部第一个可见楼层, 使「上一楼/下一楼」按可视顺序逐层跳转.
- *
- * 与 [middleVisiblePost](取中间楼, 用于收藏楼层/返回键) 区分, 避免锚点漂移导致方向感知错乱.
- */
-private fun LazyListState.navigationAnchorPost(uiState: ThreadUiState): PostData? = layoutInfo.run {
-    // 楼主帖(FirstPost)也视为可锚定帖子: 进入详情后首个可见帖是楼主帖, 这样第一按 ▼ 落到 2 楼
-    // 优先取「顶边已进入视口」的首个帖子; 跳转让位后, 上一楼顶部在视口外, 不会被误选为锚点
-    val viewportStart = layoutInfo.viewportStartOffset
-    val postItem = visibleItemsInfo.firstOrNull {
-        (it.contentType === Type.Post || it.contentType === Type.FirstPost) &&
-                (it.offset - viewportStart) >= 0
-    } ?: visibleItemsInfo.firstOrNull {
-        it.contentType === Type.Post || it.contentType === Type.FirstPost
-    }
-        ?: return uiState.firstPost
-    if (postItem.contentType === Type.FirstPost) {
-        return uiState.firstPost
-    }
-    // item key is Post ID
-    val postId = postItem.key as Long
-    return uiState.data.fastFirstOrNull { p -> p.id == postId } ?: uiState.firstPost
 }
 
 @Composable
