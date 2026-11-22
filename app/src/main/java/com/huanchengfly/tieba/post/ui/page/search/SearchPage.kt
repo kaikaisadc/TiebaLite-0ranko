@@ -195,7 +195,7 @@ fun SearchPage(
     }
 
     val showSuggestion by remember {
-        derivedStateOf { isInputKeywordNotEmpty && inputKeyword != uiState.submittedKeyword }
+        derivedStateOf { isInputKeywordNotEmpty && inputKeyword.trim() != uiState.submittedKeyword }
     }
 
     BackHandler(enabled = isKeywordNotEmpty && isInputKeywordNotEmpty) {
@@ -272,7 +272,7 @@ fun SearchPage(
                 }
             }
         } else if (showSuggestion) { // Suggestion list: input keyword != submitted keyword
-            uiState.suggestion?.let {
+            uiState.suggestion?.takeIf { uiState.suggestionKeyword == inputKeyword.trim() }?.let {
                 SearchSuggestionList(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = contentPadding,

@@ -19,6 +19,7 @@ import com.huanchengfly.tieba.post.ui.models.PostData
 import com.huanchengfly.tieba.post.ui.models.SubPostItemData
 import com.huanchengfly.tieba.post.ui.models.ThreadInfoData
 import com.huanchengfly.tieba.post.ui.page.Destination
+import com.huanchengfly.tieba.post.ui.page.thread.confirmDeletion
 import com.huanchengfly.tieba.post.ui.page.thread.ThreadLikeUiEvent
 import com.huanchengfly.tieba.post.utils.extension.set
 import com.huanchengfly.tieba.post.utils.AccountUtil
@@ -29,7 +30,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -135,25 +135,24 @@ class SubPostsViewModel @Inject constructor(
     }
 
     fun onRefresh() {
-        if (!currentState.isRefreshing) refreshInternal()
+        if (!currentState.isRefreshing && !currentState.isLoadingMore) refreshInternal()
     }
 
     fun onLoadMore() {
-        if (!currentState.isLoadingMore) _uiState.set { copy(isLoadingMore = true) } else return
+        val state = currentState
+        if (state.isRefreshing || state.isLoadingMore || !state.page.hasMore) return
+        _uiState.update { it.copy(isLoadingMore = true) }
 
         launchInVM {
-            val stateSnapshot = currentState
-            val page = stateSnapshot.page.current + 1
-            val rec = threadRepo.pbFloor(threadId, postId, forumId, page)
-            // Combine old and new SubPosts
-            val data = withContext(Dispatchers.Default) {
-                (stateSnapshot.subPosts + rec.subPosts).distinctBy { it.id }
-            }
+            val rec = threadRepo.pbFloor(threadId, postId, forumId, state.page.current + 1)
+            // An overlapping server page can still contain a reply deleted during the request.
+            val previousIds = state.subPosts.mapTo(HashSet()) { it.id }
+            val additions = rec.subPosts.filterNot { it.id in previousIds }.distinctBy { it.id }
             _uiState.update {
                 it.copy(
                     isLoadingMore = false,
                     post = rec.post,
-                    subPosts = data,
+                    subPosts = it.subPosts + additions,
                     page = rec.page,
                     tbs = rec.tbs,
                     thread = rec.thread
@@ -174,15 +173,18 @@ class SubPostsViewModel @Inject constructor(
      *
      * @see onDeleteConfirmed
      * */
-    fun onDeletePost() = _delete.update { currentState.post!! }
+    fun onDeletePost() = _delete.update { currentState.post }
 
     fun onDeleteCancelled() = _delete.update { null }
 
-    fun onDeleteConfirmed(): Job = launchJobInVM {
+    fun onDeleteConfirmed(target: Any): Job = launchJobInVM {
+        _delete.confirmDeletion(target) { deleteTarget(target) }
+    }
+
+    private suspend fun deleteTarget(target: Any) {
         val uiStateSnapshot = currentState
-        val target = _delete.getAndUpdate { null }
+        val thread = uiStateSnapshot.thread ?: return
         runCatching {
-            val thread = uiStateSnapshot.thread!!
             val tbs = uiStateSnapshot.tbs
             val myUid = currentAccount.first()?.uid ?: throw TiebaNotLoggedInException()
             when (target) {

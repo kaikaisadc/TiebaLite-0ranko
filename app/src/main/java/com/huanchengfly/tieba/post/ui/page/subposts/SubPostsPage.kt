@@ -552,7 +552,7 @@ private fun DeletePostSubPostDialog(
     dialogState: DialogState = rememberDialogState(),
     deleteTarget: Any?, // Post or Subpost
     onCancel: () -> Unit,
-    onConfirm: () -> Job
+    onConfirm: (Any) -> Job
 ) {
     LaunchedEffect(deleteTarget) {
         if (deleteTarget != null) dialogState.show()
@@ -580,8 +580,9 @@ private fun DeletePostSubPostDialog(
 
                     Button(
                         onClick = {
+                            if (deleting || deleteTarget == null) return@Button
                             deleting = true
-                            onConfirm().invokeOnCompletion {
+                            onConfirm(deleteTarget).invokeOnCompletion {
                                 dismiss()
                                 deleting = false
                             }
