@@ -30,4 +30,7 @@ data class FollowUser(
     val portrait: String,
     val intro: String?,
     @ConcernType val concernType: Int,
-)
+) {
+    val canChangeFollow: Boolean
+        get() = portrait.isNotBlank() && concernType != ConcernType.UPDATING
+}

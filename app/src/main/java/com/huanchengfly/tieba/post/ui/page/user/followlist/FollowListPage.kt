@@ -60,7 +60,6 @@ import com.huanchengfly.tieba.post.ui.icons.PersonHeart
 import com.huanchengfly.tieba.post.ui.models.user.ConcernType
 import com.huanchengfly.tieba.post.ui.models.user.FollowUser
 import com.huanchengfly.tieba.post.ui.page.Destination
-import com.huanchengfly.tieba.post.ui.page.user.followlist.FollowListViewModel.Companion.FollowListFilter
 import com.huanchengfly.tieba.post.ui.widgets.compose.Avatar
 import com.huanchengfly.tieba.post.ui.widgets.compose.BackNavigationIcon
 import com.huanchengfly.tieba.post.ui.widgets.compose.ClickMenu
@@ -164,7 +163,12 @@ fun FollowListPage(
     ) { contentPaddings ->
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val filter = uiState.filter
-        val filteredUsers by viewModel.filteredUsers.collectAsStateWithLifecycle()
+        val filteredUsers = remember(filter, uiState.users) {
+            when (filter) {
+                FollowListFilter.All -> uiState.users
+                FollowListFilter.Mutual -> uiState.users.filter { it.concernType == ConcernType.MUTUAL }
+            }
+        }
 
         StateScreen(
             isEmpty = uiState.users.isEmpty(),
@@ -363,7 +367,7 @@ private fun FollowListFollowButton(
     Button(
         onClick = onClick,
         modifier = modifier,
-        enabled = user.concernType != ConcernType.UPDATING,
+        enabled = user.canChangeFollow,
         colors = if (user.concernType <= ConcernType.NONE) {
             ButtonDefaults.buttonColors()
         } else {
