@@ -260,7 +260,7 @@ fun UserPage(viewModel: UserViewModel = viewModel()) {
                             .padding(horizontal = 16.dp, vertical = 16.dp),
                         userName = account.nickname ?: account.name,
                         userIntro = account.intro?.takeUnless { it.isEmpty() },
-                        avatar = remember { StringUtil.getAvatarUrl(account.portrait) },
+                        avatar = StringUtil.getAvatarUrl(account.portrait),
                     )
 
                     Surface(

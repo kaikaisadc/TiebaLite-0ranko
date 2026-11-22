@@ -455,7 +455,7 @@ class ThreadViewModel @Inject constructor(
 
     fun onThreadLikeClicked(): Unit = launchInVM {
         val stateSnapshot = currentState
-        val oldThread = stateSnapshot.thread ?: throw NullPointerException()
+        val oldThread = stateSnapshot.thread ?: return@launchInVM
         val like = oldThread.like
 
         // check user logged in & requesting like status update
@@ -534,19 +534,18 @@ class ThreadViewModel @Inject constructor(
     }
 
     fun requestPollPost(options: List<Int>) = launchInVM {
-        val thread = currentState.thread!!
-        if (thread.pollInfo!!.isLoading) return@launchInVM
+        if (currentState.thread?.pollInfo?.isLoading != false) return@launchInVM
 
-        _uiState.update { it.copy(thread = thread.updatePollStatus(loading = true)) }
+        _uiState.update { it.copy(thread = it.thread?.updatePollStatus(loading = true)) }
         runCatching {
             threadRepo.requestPollPost(forumId, threadId, options)
         }
         .onFailure { e ->
             sendUiEvent(CommonUiEvent.ToastError(e))
-            _uiState.update { it.copy(thread = thread.updatePollStatus(loading = false)) }
+            _uiState.update { it.copy(thread = it.thread?.updatePollStatus(loading = false)) }
         }
         .onSuccess { pollInfo ->
-            _uiState.update { it.copy(thread = thread.copy(pollInfo = pollInfo)) }
+            _uiState.update { it.copy(thread = it.thread?.copy(pollInfo = pollInfo)) }
         }
     }
 

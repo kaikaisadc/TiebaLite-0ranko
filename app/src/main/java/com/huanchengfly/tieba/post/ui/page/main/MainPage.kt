@@ -72,15 +72,12 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.key
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -153,7 +150,6 @@ import com.huanchengfly.tieba.post.ui.widgets.compose.rememberTbHazeState
 import com.huanchengfly.tieba.post.utils.DeviceUtils.vibrateOneShot
 import com.huanchengfly.tieba.post.utils.LocalAccount
 import dev.chrisbanes.haze.hazeSource
-import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -897,43 +893,20 @@ fun rememberTopAppBarScrollBehaviors(
     size: Int,
     init: @Composable (TopAppBarState) -> TopAppBarScrollBehavior
 ): List<TopAppBarScrollBehavior> {
-    var result: List<TopAppBarScrollBehavior> by remember(size) { mutableStateOf(emptyList()) }
-
-    val stateList = rememberSaveable(size, saver = Saver) {
-        val states = mutableListOf<TopAppBarState>()
-        repeat(size) {
-            states.add(TopAppBarState(-Float.MAX_VALUE, 0f, 0f))
-        }
-        states.toImmutableList()
+    val states = rememberSaveable(size, saver = TopAppBarStatesSaver) {
+        List(size) { TopAppBarState(-Float.MAX_VALUE, 0f, 0f) }
     }
-
-    if (result.isEmpty()) {
-        result = stateList.fastMap { init(it) }
-    }
-    return result
+    return states.fastMap { init(it) }
 }
 
-/** The default [Saver] implementation for list of [TopAppBarState]. */
-@Suppress("UNCHECKED_CAST")
-private val Saver: Saver<List<TopAppBarState>, *> = listSaver(
-    save = {
-        it.mapIndexed { i, it ->
-            mutableListOf(it.heightOffsetLimit, it.heightOffset, it.contentOffset)
-        }.reduce { rec, list ->
-            rec.apply { addAll(list) }
-        }
+private val TopAppBarStatesSaver = listSaver<List<TopAppBarState>, Float>(
+    save = { states ->
+        states.flatMap { listOf(it.heightOffsetLimit, it.heightOffset, it.contentOffset) }
     },
-    restore = {
-        assert(it.isNotEmpty())
-        val states = mutableListOf<TopAppBarState>()
-        var trimList = it
-        val saver = (TopAppBarState.Saver as Saver<TopAppBarState, List<Float>>)
-        repeat(it.size / 3) { i ->
-            trimList = it.subList(i * 3, it.size)
-            val state = saver.restore(trimList)!!
-            states.add(state)
-        }
-        states.toImmutableList()
+    restore = { values ->
+        if (values.size % 3 == 0) {
+            values.chunked(3) { (limit, height, content) -> TopAppBarState(limit, height, content) }
+        } else null
     }
 )
 

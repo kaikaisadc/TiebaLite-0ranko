@@ -381,9 +381,9 @@ fun ThreadPage(
     val collectClick: () -> Unit = {
         if (state.user == null) {
             context.toastShort(R.string.title_not_logged_in)
-        } else if (state.thread!!.collected) {
+        } else if (state.thread?.collected == true) {
             viewModel.removeFromCollections()
-        } else {
+        } else if (state.thread != null) {
             lazyListState.middleVisiblePost(state)?.let { post ->
                 viewModel.updateCollections(markedPost = post)
             }
@@ -683,7 +683,7 @@ fun ThreadPage(
         viewModel.requestLoadMyLatestReply(event.newPostId)
     }
 
-    if (extra != null && extra is ThreadFrom.Store && extra.maxPid != postId) {
+    if (extra is ThreadFrom.Store && extra.maxPid != postId) {
         CollectionsUpdatedSnack(snackbarHostState, extra) {
             viewModel.requestLoad(page = 0, postId = extra.maxPid)
         }
@@ -762,7 +762,7 @@ fun ThreadPage(
 
     state.thread?.collectMarkPid?.let { collectMarkPid ->
         StrongBox {
-            val interceptBack by remember {
+            val interceptBack by remember(collectMarkPid, lazyListState, bottomSheetState) {
                 derivedStateOf {
                     bottomSheetState.isVisible || collectMarkPid != lazyListState.middleVisiblePost(state)?.id
                 }
@@ -1070,17 +1070,7 @@ fun ThreadPage(
                         isImmersiveMode = viewModel.isImmersiveMode,
                         isDesc = isDesc,
                         onSeeLzClick = viewModel::onSeeLzChanged,
-                        onCollectClick = {
-                            if (state.user == null) {
-                                context.toastShort(R.string.title_not_logged_in)
-                            } else if (state.thread!!.collected) {
-                                viewModel.removeFromCollections()
-                            } else {
-                                lazyListState.middleVisiblePost(state)?.let { post ->
-                                    viewModel.updateCollections(markedPost = post)
-                                }
-                            }
-                        },
+                        onCollectClick = collectClick,
                         onImmersiveModeClick = {
                             if (!viewModel.isImmersiveMode && !state.seeLz) {
                                 viewModel.onSeeLzChanged()
