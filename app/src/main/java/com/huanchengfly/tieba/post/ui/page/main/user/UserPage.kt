@@ -47,14 +47,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.window.core.layout.WindowSizeClass
-import com.huanchengfly.tieba.post.LocalWindowAdaptiveInfo
 import com.huanchengfly.tieba.post.R
 import com.huanchengfly.tieba.post.navigateDebounced
 import com.huanchengfly.tieba.post.theme.isDarkScheme
 import com.huanchengfly.tieba.post.theme.isTranslucent
 import com.huanchengfly.tieba.post.ui.common.theme.compose.BebasFamily
-import com.huanchengfly.tieba.post.ui.common.theme.compose.onCase
 import com.huanchengfly.tieba.post.ui.common.theme.compose.onNotNull
 import com.huanchengfly.tieba.post.ui.page.Destination
 import com.huanchengfly.tieba.post.ui.page.LocalNavController
@@ -233,8 +230,6 @@ fun UserPage(viewModel: UserViewModel = viewModel()) {
     val navigator = LocalNavController.current
     val colorScheme = MaterialTheme.colorScheme
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-    val windowSizeClass = LocalWindowAdaptiveInfo.current.windowSizeClass
-    val isWindowHeightExpanded = windowSizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_EXPANDED_LOWER_BOUND)
 
     MyScaffold(
         modifier = Modifier.fillMaxSize(),
@@ -252,7 +247,7 @@ fun UserPage(viewModel: UserViewModel = viewModel()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .onCase(!isWindowHeightExpanded) { verticalScroll(state = rememberScrollState()) }
+                    .verticalScroll(rememberScrollState())
                     .padding(contentPaddings)
             ) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -289,9 +284,6 @@ fun UserPage(viewModel: UserViewModel = viewModel()) {
                     LoginTipCard(modifier = Modifier.padding(16.dp))
                 }
 
-                if (isWindowHeightExpanded) {
-                    Spacer(modifier = Modifier.weight(0.7f))
-                }
                 UserMenu(
                     onThreadStoreClicked = { navigator.navigateDebounced(Destination.ThreadStore) }.takeIf { account != null },
                     onHistoryClicked = {
@@ -311,9 +303,6 @@ fun UserPage(viewModel: UserViewModel = viewModel()) {
                         navigator.navigateDebounced(route = SettingsDestination.UI)
                     }
                 )
-                if (isWindowHeightExpanded) {
-                    Spacer(modifier = Modifier.weight(0.2f))
-                }
             }
         }
     }
