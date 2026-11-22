@@ -53,7 +53,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
@@ -482,12 +481,10 @@ class ThreadViewModel @Inject constructor(
         }
     }
 
-    fun onDeleteConfirmed(): Job = launchJobInVM {
-        val post = _deletePost.getAndUpdate { null } ?: throw NullPointerException()
-        if (post.id == currentState.firstPost!!.id) {
-            requestDeleteThread()
-        } else {
-            requestDeletePost(post)
+    fun onDeleteConfirmed(post: PostData): Job = launchJobInVM {
+        _deletePost.confirmDeletion(post) {
+            val firstPost = currentState.firstPost ?: return@confirmDeletion
+            if (post.id == firstPost.id) requestDeleteThread() else requestDeletePost(post)
         }
     }
 

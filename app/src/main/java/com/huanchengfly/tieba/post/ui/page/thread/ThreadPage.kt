@@ -1320,7 +1320,7 @@ private fun CollectionsUpdateDialog(markedPost: PostData, onUpdate: (PostData) -
 private fun ThreadOrPostDeleteDialog(
     deletePost: PostData?,
     firstPost: PostData?,
-    onConfirm: () -> Job,
+    onConfirm: (PostData) -> Job,
     onCancel: () -> Unit
 ) {
     val dialogState = rememberDialogState()
@@ -1350,8 +1350,9 @@ private fun ThreadOrPostDeleteDialog(
 
                     Button(
                         onClick = {
+                            if (deleting || deletePost == null) return@Button
                             deleting = true
-                            onConfirm().invokeOnCompletion {
+                            onConfirm(deletePost).invokeOnCompletion {
                                 dismiss()
                                 deleting = false
                             }
